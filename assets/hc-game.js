@@ -426,7 +426,7 @@ function paBonus(off){ const s = G.st[off]; return s.plays >= 6 && s.ratt / Math
 // expected value of an offensive call against a defensive call, from the offense's side
 const repOf = (off, oK) => (G.recent && G.recent[off] ? G.recent[off].slice(-3).filter(k => k === oK).length : 0);
 // a defense that has seen the same call over and over sits on it
-function keyed(M, n){ if (!n) return M; return { ...M, dm:(M.dm || 0) - .8 * n, dc:(M.dc || 0) - .04 * n, ds:(M.ds || 0) + .012 * n, dy:(M.dy || 0) - .4 * n }; }
+function keyed(M, n){ if (!n) return M; return { ...M, dm:(M.dm || 0) - .8 * n, dc:(M.dc || 0) - .025 * n, ds:(M.ds || 0) + .012 * n, dy:(M.dy || 0) - .4 * n }; }
 function ev(oK, dK, off){
   const P = OFF[oK], M = keyed(modOf(oK, dK), repOf(off, oK)), e = edgeOf(off, P), pd = G.plan[opp(off)].d;
   const tg = Math.min(G.togo, ytg()), dn = G.down;
@@ -515,22 +515,22 @@ function recFor(mode){
 const pickRB = t => { const r = t.rb; if (!r.length) return [last('Running back'), 'RB']; const n = r.length > 1 && rnd() < .36 ? r[1] : r[0]; return [n[0], 'RB']; };
 /* every receiver runs a route; the QB reads them in order and throws to whoever gets open */
 const RP = {   // route profiles: timing class, air yards, spread, yards after catch, catch rate, pick rate
-  slant:{ d:'short',  m:6,  sd:2.5, yac:4.5, cmp:.75, int:.019 },
-  out:  { d:'short',  m:6,  sd:2,   yac:3,   cmp:.73, int:.022 },
-  curl: { d:'short',  m:8,  sd:2.5, yac:3,   cmp:.77, int:.017 },
-  dig:  { d:'short',  m:12, sd:3,   yac:3.5, cmp:.66, int:.022 },
-  seam: { d:'deep',   m:15, sd:5,   yac:4.5, cmp:.56, int:.026 },
-  post: { d:'deep',   m:17, sd:6,   yac:4.5, cmp:.52, int:.026 },
-  go:   { d:'deep',   m:22, sd:8,   yac:5,   cmp:.42, int:.037 },
-  check:{ d:'short',  m:2,  sd:2,   yac:5,   cmp:.85, int:.008 },
-  screen:{ d:'screen', m:-2, sd:1,  yac:7,   cmp:.86, int:.01 },
-  flat: { d:'short',  m:2,  sd:1.5, yac:4.5, cmp:.80, int:.012 },
-  drag: { d:'short',  m:4,  sd:1.5, yac:6,   cmp:.80, int:.012 },
-  comeback:{ d:'short', m:12, sd:2.5, yac:2, cmp:.70, int:.025 },
-  corner:{ d:'deep',  m:18, sd:5,   yac:3.5, cmp:.50, int:.03 },
-  swing:{ d:'short',  m:1,  sd:1.5, yac:6,   cmp:.82, int:.01 },
-  angle:{ d:'short',  m:5,  sd:2,   yac:5,   cmp:.74, int:.015 },
-  wheel:{ d:'deep',   m:16, sd:5,   yac:5,   cmp:.46, int:.025 }
+  slant:{ d:'short',  m:6,  sd:2.5, yac:4.5, cmp:.85, int:.019 },
+  out:  { d:'short',  m:6,  sd:2,   yac:3,   cmp:.83, int:.022 },
+  curl: { d:'short',  m:8,  sd:2.5, yac:3,   cmp:.87, int:.017 },
+  dig:  { d:'short',  m:12, sd:3,   yac:3.5, cmp:.76, int:.022 },
+  seam: { d:'deep',   m:15, sd:5,   yac:4.5, cmp:.66, int:.026 },
+  post: { d:'deep',   m:17, sd:6,   yac:4.5, cmp:.62, int:.026 },
+  go:   { d:'deep',   m:22, sd:8,   yac:5,   cmp:.52, int:.037 },
+  check:{ d:'short',  m:2,  sd:2,   yac:5,   cmp:.93, int:.008 },
+  screen:{ d:'screen', m:-2, sd:1,  yac:7,   cmp:.93, int:.01 },
+  flat: { d:'short',  m:2,  sd:1.5, yac:4.5, cmp:.90, int:.012 },
+  drag: { d:'short',  m:4,  sd:1.5, yac:6,   cmp:.90, int:.012 },
+  comeback:{ d:'short', m:12, sd:2.5, yac:2, cmp:.80, int:.025 },
+  corner:{ d:'deep',  m:18, sd:5,   yac:3.5, cmp:.60, int:.03 },
+  swing:{ d:'short',  m:1,  sd:1.5, yac:6,   cmp:.92, int:.01 },
+  angle:{ d:'short',  m:5,  sd:2,   yac:5,   cmp:.84, int:.015 },
+  wheel:{ d:'deep',   m:16, sd:5,   yac:5,   cmp:.56, int:.025 }
 };
 // who runs what on each pass play (8/9/10 = WR1/WR2/slot, 5 = TE, 7 = RB); p = the primary read
 const TREE = {
