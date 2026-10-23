@@ -630,3 +630,7 @@ table.stats{border-collapse:separate;border-spacing:0;width:100%;font-variant-nu
 #netov[hidden]{display:none}
 .no-msg{padding:16px 16px 14px;color:#E6E1FF;font-size:1rem;line-height:1.4;text-align:center}
 #netov .ct-btns{padding:0 16px 4px}
+/* in-play throw keys on the name plates */
+.npl .tk{display:none}
+.npl.thr .tk{display:inline-flex;align-items:center;justify-content:center;align-self:center;min-width:12px;height:12px;margin-right:1px;padding:0 2px;background:#FFE600;color:#0E0B1A;border-radius:2px;font-family:var(--f-hud);font-style:normal;font-weight:900;font-size:.5rem;line-height:1;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.npl.thr{border-bottom-color:#FFE600}

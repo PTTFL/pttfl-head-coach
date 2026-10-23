@@ -118,6 +118,8 @@ const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce
 let SPEED = store.get('hc-speed', 1);
 const FF = 5, spd = () => SPEED * (G && G.auto ? FF : 1);
 let EPOCH = 0, PAUSED = false, PQ = [];
+// a throw key pressed during your pass play (see throwPlay)
+const THROW = { on:false, req:null, ids:[], ver:0 };
 // waits die quietly when a game is abandoned, and hold while the menu is open
 const wait = ms => { const e = EPOCH; return new Promise(r => setTimeout(function go(){ if (e !== EPOCH) return; if (PAUSED){ PQ.push(go); return; } r(); }, ms / spd())); };
 const ord = n => ['', '1ST', '2ND', '3RD', '4TH', 'OT'][n] || n + 'TH';
@@ -183,7 +185,7 @@ function buildStadium(){
 }
 const POS = new Map();
 /* name plates over the offense's fantasy players: projected from each sprite's screen box every frame */
-let PLF = null, plKey = '', plEls = [];
+let PLF = null, plKey = '', plEls = [], plThr = -1;
 function plateTick(){
   requestAnimationFrame(plateTick);
   const box = ov && ov.querySelector('.plates'); if (!box) return;
@@ -196,8 +198,14 @@ function plateTick(){
     const list = PLF === 'fg' ? [[7, kk, 'K']] : PLF === 'punt' ? [[6, kk, 'P']] : [[6, qb, 'QB'], [7, sk[7].n, 'RB'], [5, sk[5].n, 'TE'], [8, sk[8].n, 'WR'], [9, sk[9].n, 'WR'], ...(['i', 'jumbo'].includes(PLF) ? [] : [[10, sk[10].n, 'WR']])]
       .filter(x => x[1] && !/^the /.test(x[1]));
     box.className = 'plates ' + side;
-    box.innerHTML = list.map(x => `<span class="npl"><b>${esc(last(x[1]))}</b><em>${x[2]}</em></span>`).join('');
+    box.innerHTML = list.map(x => `<span class="npl"><i class="tk"></i><b>${esc(last(x[1]))}</b><em>${x[2]}</em></span>`).join('');
     plEls = list.map((x, j) => [x[0], box.children[j]]);
+    plThr = -1;
+  }
+  // during your pass play each receiver's plate shows the key that throws it to him
+  const tv = THROW.on && G.poss === ME ? THROW.ver : 0;
+  if (tv !== plThr){ plThr = tv;
+    for (const [i, el] of plEls){ const n = tv ? THROW.ids.indexOf(i) : -1, t = el.querySelector('.tk'); if (t) t.textContent = n >= 0 ? n + 1 : ''; el.classList.toggle('thr', n >= 0); el._w = 0; }
   }
   // place each plate over its man; when two would overlap (QB and back stacked), lift the farther one
   const pts = [];
@@ -255,8 +263,8 @@ function frame(now){
   if (ANIM && PAUSED) ANIM.t0 += dt;
   else if (ANIM){
     const k = clamp((now - ANIM.t0) / ANIM.ms, 0, 1);
-    ANIM.apply(k);
-    if (k >= 1){ const r = ANIM.res; ANIM = null; r(); }
+    const stop = ANIM.apply(k) === true;
+    if (k >= 1 || stop){ const r = ANIM.res; ANIM = null; r(); }
   }
   if (camFollow){ const f = camFollow(); camGame(f[0], f[1]); }
   let moved = camSnap; camSnap = false;
@@ -515,22 +523,22 @@ function recFor(mode){
 const pickRB = t => { const r = t.rb; if (!r.length) return [last('Running back'), 'RB']; const n = r.length > 1 && rnd() < .36 ? r[1] : r[0]; return [n[0], 'RB']; };
 /* every receiver runs a route; the QB reads them in order and throws to whoever gets open */
 const RP = {   // route profiles: timing class, air yards, spread, yards after catch, catch rate, pick rate
-  slant:{ d:'short',  m:6,  sd:2.5, yac:4.5, cmp:.85, int:.019 },
-  out:  { d:'short',  m:6,  sd:2,   yac:3,   cmp:.83, int:.022 },
-  curl: { d:'short',  m:8,  sd:2.5, yac:3,   cmp:.87, int:.017 },
-  dig:  { d:'short',  m:12, sd:3,   yac:3.5, cmp:.76, int:.022 },
-  seam: { d:'deep',   m:15, sd:5,   yac:4.5, cmp:.66, int:.026 },
-  post: { d:'deep',   m:17, sd:6,   yac:4.5, cmp:.62, int:.026 },
-  go:   { d:'deep',   m:22, sd:8,   yac:5,   cmp:.52, int:.037 },
-  check:{ d:'short',  m:2,  sd:2,   yac:5,   cmp:.93, int:.008 },
-  screen:{ d:'screen', m:-2, sd:1,  yac:7,   cmp:.93, int:.01 },
-  flat: { d:'short',  m:2,  sd:1.5, yac:4.5, cmp:.90, int:.012 },
-  drag: { d:'short',  m:4,  sd:1.5, yac:6,   cmp:.90, int:.012 },
-  comeback:{ d:'short', m:12, sd:2.5, yac:2, cmp:.80, int:.025 },
-  corner:{ d:'deep',  m:18, sd:5,   yac:3.5, cmp:.60, int:.03 },
-  swing:{ d:'short',  m:1,  sd:1.5, yac:6,   cmp:.92, int:.01 },
-  angle:{ d:'short',  m:5,  sd:2,   yac:5,   cmp:.84, int:.015 },
-  wheel:{ d:'deep',   m:16, sd:5,   yac:5,   cmp:.56, int:.025 }
+  slant:{ d:'short',  m:6,  sd:2.5, yac:4.5, cmp:.90, int:.019 },
+  out:  { d:'short',  m:6,  sd:2,   yac:3,   cmp:.88, int:.022 },
+  curl: { d:'short',  m:8,  sd:2.5, yac:3,   cmp:.92, int:.017 },
+  dig:  { d:'short',  m:12, sd:3,   yac:3.5, cmp:.81, int:.022 },
+  seam: { d:'deep',   m:15, sd:5,   yac:4.5, cmp:.71, int:.026 },
+  post: { d:'deep',   m:17, sd:6,   yac:4.5, cmp:.67, int:.026 },
+  go:   { d:'deep',   m:22, sd:8,   yac:5,   cmp:.57, int:.037 },
+  check:{ d:'short',  m:2,  sd:2,   yac:5,   cmp:.95, int:.008 },
+  screen:{ d:'screen', m:-2, sd:1,  yac:7,   cmp:.95, int:.01 },
+  flat: { d:'short',  m:2,  sd:1.5, yac:4.5, cmp:.95, int:.012 },
+  drag: { d:'short',  m:4,  sd:1.5, yac:6,   cmp:.95, int:.012 },
+  comeback:{ d:'short', m:12, sd:2.5, yac:2, cmp:.85, int:.025 },
+  corner:{ d:'deep',  m:18, sd:5,   yac:3.5, cmp:.65, int:.03 },
+  swing:{ d:'short',  m:1,  sd:1.5, yac:6,   cmp:.95, int:.01 },
+  angle:{ d:'short',  m:5,  sd:2,   yac:5,   cmp:.89, int:.015 },
+  wheel:{ d:'deep',   m:16, sd:5,   yac:5,   cmp:.61, int:.025 }
 };
 // who runs what on each pass play (8/9/10 = WR1/WR2/slot, 5 = TE, 7 = RB); p = the primary read
 const TREE = {
@@ -589,6 +597,14 @@ function readField(OT, oK, dK, e){
   const idx = order[k];
   return { idx, route:tree[idx], n:who[idx].n, pos:who[idx].pos, k, s:sc[idx], routes:tree, sc };
 }
+// catch and pick chances for one throw: the route, how open he is, the coverage, the QB, the pressure
+function passOdds(oK, dK, off, route, s, hurry, rp, e, extra = 0){
+  const P = OFF[oK], OT = TM(off), RF = RP[route], cat = routeCat(P, route), Mr = keyed(modOf(oK, dK, cat), rp);
+  const qbv = (OT.qb[0] || [0, 0, 0, 15])[3], acc = clamp((qbv - 15) * .006, -.05, .07);
+  const pint = Math.max(.004, RF.int + (Mr.di || 0) - e * .006 - s * .008 - Math.max(0, (qbv - 15) * .0008) + (hurry ? .012 : 0));
+  const pc = clamp(RF.cmp + (Mr.dc || 0) + e * .035 + acc + (cat === 'pa' ? paBonus(off) : 0) + clamp(s * .05, -.1, .12) - (hurry ? .1 : 0) + extra, .1, .95);
+  return { pint, pc, Mr, RF, cat };
+}
 function resolve(oK, dK){
   const off = G.poss, def = opp(off), OT = TM(off), DT = TM(def), P = OFF[oK], rp = repOf(off, oK), M = keyed(modOf(oK, dK), rp);
   const e = edgeOf(off, P), y0 = ytg(), back = 100 - y0, pd = G.plan[def].d;
@@ -612,7 +628,7 @@ function resolve(oK, dK){
     const rd = readField(OT, oK, dK, e), tg = { n:rd.n, idx:rd.idx };
     R.tgt = rd.n; R.tIdx = rd.idx; R.tPos = rd.pos; R.route = rd.route; R.read = rd.k; R.routes = rd.routes; R.open = rd.s; R.sep = rd.sc;
     const RF = RP[rd.route], cat = routeCat(P, rd.route), Mr = keyed(modOf(oK, dK, cat), rp);
-    R.depth = cat === 'pa' ? 'pa' : RF.d;
+    R.depth = cat === 'pa' ? 'pa' : RF.d; R.e = e; R.rp = rp;
     // the longer he holds it going through his reads, the more time the rush gets
     // keeping a tight end or back in to block buys the QB time; sending an extra man out costs some
     const PR = passRush(off, oK, dK, RF, rd.k, rp); R.rush = PR;
@@ -622,10 +638,7 @@ function resolve(oK, dK){
     else if (PR.sack){
       R.kind = 'sack'; let y = -ri(4, 9); if (y <= -back){ y = -back; R.safety = true; } R.yards = y;
     } else {
-      const pint = Math.max(.004, RF.int + (Mr.di || 0) - e * .006 - rd.s * .008 - Math.max(0, ((OT.qb[0] || [0, 0, 0, 15])[3] - 15) * .0008) + (PR.hurry ? .012 : 0));
-      const qbv = (OT.qb[0] || [0, 0, 0, 15])[3], acc = clamp((qbv - 15) * .006, -.05, .07);
-      const hurry = PR.hurry ? .1 : 0;
-      const pc = clamp(RF.cmp + (Mr.dc || 0) + e * .035 + acc + (cat === 'pa' ? paBonus(off) : 0) + clamp(rd.s * .05, -.1, .12) - hurry, .1, .95);
+      const { pint, pc } = passOdds(oK, dK, off, rd.route, rd.s, PR.hurry, rp, e);
       const scr = RF.d === 'screen';
       let air = Math.round(clamp(RF.m + (Mr.dm || 0) * .4 + gauss() * RF.sd, scr ? -4 : rd.route === 'swing' ? -2 : rd.route === 'check' || rd.route === 'flat' ? -1 : 1, 62));
       if (air >= y0) air = y0 + (scr ? 0 : ri(1, 6));
@@ -823,7 +836,7 @@ function choreo(R){
   const y0 = ytg(), Y = R.yards * 10;
   const { O, Dd } = forms(R.fm, R.dK, y0);
   const of = [], df = [];
-  let ball, dur = 3, focus, hero = [], tk = -1, live = null; PASS_SCALE = 1;
+  let ball, dur = 3, focus, hero = [], tk = -1, live = null, PX = null; PASS_SCALE = 1;
   const s = R.side || 1;
   const ol = i => kf([[0, O[i][0], O[i][1]], [.25, O[i][0] + 6, O[i][1]], [1, O[i][0] + 12, O[i][1] * 1.05]]);
   const olPass = i => kf([[0, O[i][0], O[i][1]], [.3, O[i][0] - 12, O[i][1] * 1.1], [1, O[i][0] - 16, O[i][1] * 1.15]]);
@@ -928,14 +941,17 @@ function choreo(R){
     const mirror = (rc, d0, sep) => t => { const lagT = Math.max(0, t - (.05 + Math.max(0, sep) * .06)), p = rc(lagT), k = clamp(t / .2, 0, 1), ramp = clamp((t - .15) / .3, 0, 1);
       const back = (12 - Math.max(0, sep) * 16) * ramp + 12 * (1 - ramp), side = (p[1] > 0 ? -1 : 1) * (8 + Math.max(0, sep) * 14 * ramp);
       return [lerp(d0[0], p[0] + back, k), lerp(d0[1], p[1] + side, k), 0]; };
+    // every man running a route has someone on him (blitzing linebackers aside)
+    const covBy = {}; for (const r in covOf) covBy[covOf[r]] = +r;
     const pre = Dd.map((p, i) => {
       if (i === ci) return mirror(RCV, p, sepOf(ti));
-      if (i === 7 && ti !== 8) return mirror(of[8], p, sepOf(8));
-      if (i === 8 && ti !== 9) return mirror(of[9], p, sepOf(9));
+      const cr = covBy[i];
+      if (cr != null && cr !== ti && tree[cr] && !(R.dK === 'blitz' && (i === 4 || i === 6))) return mirror(of[cr], p, sepOf(cr));
       if (i <= 3) return kf([[0, p[0], p[1]], [.3, -4, p[1] * .9], [1, -18, p[1] * .7]]);
       if (R.dK === 'blitz' && (i === 4 || i === 6)) return kf([[0, p[0], p[1]], [.4, -30, p[1] * .4], [1, -44, p[1] * .2]]);
       return kf([[0, p[0], p[1]], [.4, p[0] + (i <= 6 ? 32 : 16), p[1] * .95], [1, p[0] + (i <= 6 ? 40 : 22), p[1] * .95]]);
     });
+    const px = { QB, of0:of.slice(), pre, Db, tTh, tC, ci, covOf, dcls, kLimit:tTh };
     if (R.kind === 'sack'){
       const atS = R.rush ? R.rush.at : 1.1, dS = Math.max(2.5, atS + 1.2), tS = clamp(atS / dS, .22, .7), rIdx = R.rush ? R.rush.who : 1;
       const qp = at(QB, tS), dn = [Y, qp[1] + 4];
@@ -945,6 +961,7 @@ function choreo(R){
       pre[rIdx] = t => t <= tS ? (k => { const d0 = Dd[rIdx]; return [lerp(d0[0], qp[0] + 6, k), lerp(d0[1], qp[1] + 4, k), 0]; })(clamp(t / tS, 0, 1)) : (p => [p[0] + 7, p[1] + 2, 0])(QB2(t));
       for (let i = 0; i < 11; i++) df[i] = i === rIdx ? pre[i] : freeze(pre[i], tS + .15);
       ball = carried(QB2); dur = dS; focus = ball; hero = [6, 11 + rIdx];
+      px.kLimit = tS - .01; px.rIdx = rIdx; px.tS = tS;
     } else if (R.kind === 'inc'){
       const land = [Cp[0] + 26, Cp[1] + 6];
       for (let i = 0; i < 11; i++) of[i] = freeze(of[i], tC + .12);
@@ -956,6 +973,7 @@ function choreo(R){
       const pc = pre[ci];
       const intr = t => t <= tC ? (k => { const p = pc(t), q = [Cp[0] + 4, Cp[1]]; return [lerp(p[0], q[0], k), lerp(p[1], q[1], k), 0]; })(clamp((t - (tC - .14)) / .14, 0, 1)) : (k => [lerp(Cp[0] + 4, Rt[0], k), lerp(Cp[1], Rt[1], k), 0])(clamp((t - tC) / (tE - tC), 0, 1));
       const INT = R.pick6 ? hop(intr, tE) : intr;
+      px.kLimit = Math.min(px.kLimit, tC - .145);
       for (let i = 0; i < 11; i++) df[i] = i === ci ? INT : chase(pre[i], tC, [lerp(at(pre[i], tC)[0], Rt[0], .6), lerp(at(pre[i], tC)[1], Rt[1], .6)], tE);
       const opre = of.slice();
       const conv = converge(opre, opre.map(f => f), tC, Rt, tE, { noTackle:!!R.pick6 || R.tb });
@@ -986,15 +1004,89 @@ function choreo(R){
       if (isLive){ live = { ci:ti, t0:tC, target:R.yards, who:R.tgt }; for (let i = 0; i < 11; i++) df[i] = pre[i]; of[ti] = RCV; tk = -1;
         ball = seq([[tTh, carried(QB)], [tC, arc(carried(QB), tTh, [Cp[0], Cp[1]], tC, pk)], [1, carried(RCV)]]); focus = ball; }
     }
-    R.cp = Cp; R.tC = tC;
+    R.cp = Cp; R.tC = tC; PX = px;
   }
+  if (PX) PX.scale = PASS_SCALE;
   if (PASS_SCALE !== 1){
     // stretch time so the post-catch run (built past 1.0) lands inside the play
     const k = PASS_SCALE, W = f => t => f(t * k);
     for (let i = 0; i < 11; i++){ of[i] = W(of[i]); df[i] = W(df[i]); }
     ball = W(ball); focus = W(focus); PASS_SCALE = 1;
   }
-  return { dur, of, df, ball, focus, hero, tk, live };
+  return { dur, of, df, ball, focus, hero, tk, live, px:PX };
+}
+/* ---------------- throwing it yourself ----------------
+   While the QB still has the ball, a throw key sends it to that receiver right then. The throw is decided again with
+   the same odds as the QB's own read (route, separation, coverage, the QB, pressure), plus how far down the route he
+   is: a quick throw before the route gets deep is an easier completion for fewer yards. Everything before the throw
+   stays exactly as it was shown; the rest of the play is built from that moment on. */
+function throwPlay(R, ch, th){
+  const px = ch.px, sc = px.scale || 1, W = f => sc === 1 ? f : t => f(t * sc);
+  const j = th.j, k = th.k, dur = th.dur, y0 = ytg(), route = R.routes[j];
+  const QB = W(px.QB), of0 = px.of0.map(W), pre = px.pre.map(W), fj = of0[j];
+  const who = skillPlayers(TM(R.off))[j];
+  // the ball flies about 32 yards a second, plus the release: find where he'll be when it gets there
+  const q = QB(k); let tc = k + .3 / dur;
+  for (let n = 0; n < 5; n++){ const p = fj(tc); tc = k + (.22 + Math.hypot(p[0] - q[0], p[1] - q[1]) / 320) / dur; }
+  tc = Math.min(tc, .9);
+  const Cp = fj(tc).slice(0, 2);
+  const air = Math.round(Cp[0] / 10), RF = RP[route];
+  // a throw just before the rush gets home is a hurried one; getting it out early beats the pressure
+  const hurry = R.kind === 'sack' || ((R.rush && R.rush.hurry) && k >= px.kLimit / sc - .06);
+  const early = clamp((RF.m - air) * .007, -.08, .1);
+  const { pint, pc, Mr } = passOdds(R.oK, R.dK, R.off, route, (R.sep || {})[j] ?? 0, hurry, R.rp || 0, R.e || 0, early);
+  const outOfPlay = Math.abs(Cp[1]) > 258 || Cp[0] > y0 * 10 + 98;
+  const pd = G.plan[R.def].d, e = R.e || 0;
+  Object.assign(R, { tgt:who.n, tIdx:j, tPos:who.pos, route, air, open:(R.sep || {})[j] ?? 0, read:0, manual:true, away:false, safety:false, td:false, tb:false, pick6:false, ret:0, yac:0, oob:false });
+  R.depth = routeCat(R.P, route) === 'pa' ? 'pa' : RF.d;
+  const r = rnd();
+  if (!outOfPlay && r < pint) R.kind = 'int';
+  else if (!outOfPlay && r < pint + pc) R.kind = 'cmp';
+  else R.kind = 'inc';
+  if (R.kind === 'cmp'){
+    let yac = Math.max(0, RF.yac + (Mr.dy || 0) + e * .6 + gauss() * RF.yac * .8);
+    if (rnd() < .05 + (Mr.db || 0) + e * .01 + (pd === 'agg' ? .015 : 0)) yac += ri(8, 40);
+    let y = Math.round(air + yac);
+    if (air >= y0 || y >= y0){ y = y0; R.td = true; }
+    R.yards = Math.max(y, -(100 - y0) + 1); R.yac = Math.max(0, R.yards - Math.min(air, y0));
+  } else if (R.kind === 'int'){
+    if (air >= y0){ R.ret = 0; R.tb = true; }
+    else { let ret = ri(0, 22) + (rnd() < .07 ? ri(30, 70) : 0); if (air - ret <= -(100 - y0)){ ret = air + (100 - y0); R.pick6 = true; } R.ret = ret; }
+    R.yards = 0;
+  } else R.yards = 0;
+  // the play from the throw on
+  const dcls = R.depth, pk = dcls === 'deep' ? 72 : dcls === 'pa' ? 58 : dcls === 'screen' ? 12 : 34;
+  const of = of0.slice(); of[6] = QB;
+  const df = pre.slice();
+  if (px.rIdx != null) df[px.rIdx] = freeze(df[px.rIdx], Math.max(k + .02, px.tS / sc - .005));   // he gets there just as it's out
+  const toCp = arc(carried(QB), k, [Cp[0], Cp[1]], tc, pk);
+  const out = { dur, of, df, focus:null, hero:[j], tk:-1, live:null };
+  if (R.kind === 'cmp'){
+    for (let i = 0; i < 11; i++) if (i !== j && i !== 6) of[i] = freeze(of[i], tc + .15);
+    out.ball = seq([[k, carried(QB)], [tc, toCp], [1, carried(fj)]]);
+    out.live = { ci:j, t0:tc, target:R.yards, who:R.tgt };
+  } else if (R.kind === 'inc'){
+    const land = [Cp[0] + 26, Cp[1] + 6];
+    for (let i = 0; i < 11; i++){ of[i] = freeze(of[i], tc + .12); df[i] = freeze(df[i], tc + .12); }
+    out.ball = seq([[k, carried(QB)], [tc + .05, arc(carried(QB), k, [land[0], land[1]], tc + .05, pk, 1)], [1, () => [land[0] + 6, land[1], 1]]]);
+    out.endK = Math.min(1, tc + .3); out.hero = [];
+  } else {
+    const ci = px.covOf[j] != null ? px.covOf[j] : 9, ret = R.ret * 10, Rt = [Cp[0] - ret, Cp[1] + (rnd() - .5) * 120];
+    const tE = R.tb ? tc + .05 : Math.min(.95, tc + .15 + R.ret * .012), pc0 = pre[ci];
+    const tj = Math.max(k, tc - .14);   // he breaks on it once it's in the air
+    const intr = t => t <= tc ? (kk => { const p = pc0(t), qq = [Cp[0] + 4, Cp[1]]; return [lerp(p[0], qq[0], kk), lerp(p[1], qq[1], kk), 0]; })(clamp((t - tj) / ((tc - tj) || 1), 0, 1)) : (kk => [lerp(Cp[0] + 4, Rt[0], kk), lerp(Cp[1], Rt[1], kk), 0])(clamp((t - tc) / ((tE - tc) || 1), 0, 1));
+    const INT = R.pick6 ? hop(intr, tE) : intr;
+    for (let i = 0; i < 11; i++) if (i !== ci){ const pi = df[i]; df[i] = chase(pi, tc, [lerp(at(pi, tc)[0], Rt[0], .6), lerp(at(pi, tc)[1], Rt[1], .6)], tE); }
+    df[ci] = INT;
+    const conv = converge(of, of.slice(), tc, Rt, tE, { noTackle:!!R.pick6 || R.tb });
+    for (let i = 0; i < 11; i++) of[i] = conv[i];
+    out.ball = seq([[k, carried(QB)], [tc, toCp], [1, carried(INT)]]);
+    out.hero = [11 + ci]; if (conv.best >= 0) out.hero.push(conv.best);
+    out.endK = Math.min(1, tE + .06);
+  }
+  out.focus = out.ball;
+  R.cp = Cp; R.tC = tc;
+  return out;
 }
 function choreoPunt(P){
   const y0 = ytg(), { O, Dd } = forms('punt', 'punt', y0);
@@ -1055,14 +1147,16 @@ function speeds(off, ch){
   const db = (dr - 78) * .5, d = [62, 62, 62, 62, 80, 80, 80, 96, 96, 92, 92].map(v => v + db);
   return [...o, ...d, Infinity];
 }
-async function animate(ch){
+/* opt.win: a throw window ({ until }) — a throw key pressed before `until` stops the play there and returns { thrown }.
+   opt.k0 / opt.dur: pick a play back up mid-way (after a throw), on the same clock as the part already shown. */
+async function animate(ch, opt = {}){
   const w = worldFns(ch);
   camFollow = null;
   const sp = speeds(G.poss, ch);
   // the featured player moves at his own top speed: stretch the play until his path fits it
-  let dur = ch.dur;
+  let dur = opt.dur || ch.dur;
   const span = ch.live ? ch.live.t0 : 1;
-  for (const h of ch.hero || []){
+  if (!opt.dur) for (const h of ch.hero || []){
     if (!isFinite(sp[h])) continue;
     let mx = 0, prev = w.fns[h](0);
     for (let j = 1; j <= 80; j++){ const p = w.fns[h](j / 80 * span); mx = Math.max(mx, Math.hypot(p[0] - prev[0], p[1] - prev[1]) * 80 / span); prev = p; }
@@ -1070,11 +1164,15 @@ async function animate(ch){
   }
   const free = new Set([...(ch.hero || []), 22]);
   if (ch.tk >= 0) sp[11 + ch.tk] *= 1.45;   // the tackler gets a closing burst
-  const cur = w.fns.map(f => f(0));
-  let lastT = 0, fx = w.focus(0)[0];
-  const end = ch.live ? ch.live.t0 : 1;
-  await runAnim(dur * end * 1000, k0 => {
-    const k = k0 * end, t = k * dur, dt = Math.max(0, t - lastT); lastT = t;
+  const kS = opt.k0 || 0;
+  const cur = kS ? w.els.map(el => posOf(el)) : w.fns.map(f => f(0));
+  let lastT = kS * dur, fx = w.focus(kS)[0], thrown = null;
+  const end = ch.live ? ch.live.t0 : (ch.endK || 1);
+  const win = opt.win;
+  await runAnim(dur * Math.max(.01, end - kS) * 1000, k0 => {
+    const k = kS + k0 * (end - kS), t = k * dur, dt = Math.max(0, t - lastT); lastT = t;
+    if (win && THROW.req != null && k >= (win.from || 0) && k < win.until){ thrown = { j:THROW.req, k, dur }; THROW.req = null; return true; }
+    if (win && THROW.on && k >= win.until){ THROW.on = false; THROW.req = null; THROW.ver++; }   // the QB let it go himself
     w.els.forEach((el, i) => {
       const p = w.fns[i](k);
       if (free.has(i) || reduced()){ cur[i] = p; }
@@ -1084,6 +1182,7 @@ async function animate(ch){
     });
     fx = w.focus(k)[0]; camGame(fx, w.d);
   });
+  if (thrown) return { thrown };
   if (ch.live) return liveRun(ch, w, sp, cur, dur);
   return null;
 }
@@ -1695,7 +1794,18 @@ async function runPlay(oK, dK){
   await jogTo(formFor(R.fm, dK), 520);
   await wait(260);
   const ch = choreo(R);
-  const L = await animate(ch);
+  let L;
+  // your pass play: you can throw it to anyone running a route until the QB lets it go (or gets hit)
+  if (canThrow(R, ch)){
+    THROW.ids = eligibleFor(oK).filter(i => R.routes[i]); THROW.req = null; THROW.on = true; THROW.ver++;
+    if (!G.thrHint){ G.thrHint = true; toast(`PRESS ${THROW.ids.map((_, n) => n + 1).join(' ')} TO THROW TO A RECEIVER`); }
+    try {
+      const a = await animate(ch, { win:{ from:.25 / ch.dur, until:ch.px.kLimit / (ch.px.scale || 1) } });
+      THROW.on = false; THROW.ver++;
+      if (a && a.thrown){ const ch2 = throwPlay(R, ch, a.thrown); L = await animate(ch2, { k0:a.thrown.k, dur:a.thrown.dur }); }
+      else L = a;
+    } finally { THROW.on = false; THROW.req = null; THROW.ver++; }
+  } else L = await animate(ch);
   if (L){
     const y0 = ytg();
     R.yards = Math.min(L.yards, y0); R.td = L.how === 'td' || R.yards >= y0; if (R.td) R.yards = y0;
@@ -1709,6 +1819,8 @@ async function runPlay(oK, dK){
   G.hot = null;
   await applyResult(R, verdict);
 }
+function canThrow(R, ch){ return !MP && R.P.k === 'pass' && R.off === ME && !G.auto && ch.px && R.routes && Object.keys(R.routes).some(k => k !== 'p'); }
+function throwKey(n){ if (!THROW.on) return false; const j = THROW.ids[n - 1]; if (j != null && THROW.req == null) THROW.req = j; return true; }
 function addStats(R){
   const so = G.st[R.off], sd = G.st[R.def];
   so.plays++;
@@ -2196,6 +2308,7 @@ function playerTable(side){
 }
 const KEYS = [
   ['Play call', [['1–9', 'Pick a card'], ['Enter / Space', "Call the coordinator's pick"], ['R', 'Run plays'], ['F', 'Pass plays'], ['Backspace', 'Back to Run / Pass'], ['M', 'Flip the play'], ['A', 'OC / DC Auto on or off'], ['U', 'Audibles on or off']]],
+  ['During your pass play', [['1–5', 'Throw it to that receiver (same numbers as at the line; shown on the name plates)'], ['Tap a receiver', 'Throw it to him']]],
   ['Special teams', [['K', 'Field goal / extra point'], ['N', 'Punt'], ['X', 'Go for two'], ['V', 'Kneel']]],
   ['At the line (audibles)', [['1–5', 'Select a receiver'], ['0–9', 'Pick a route off the tree'], ['T', 'Make him the primary target'], ['M', 'Flip the play'], ['S', 'Save the play'], ['Enter / Space', 'Snap'], ['Esc', 'Change play']]],
   ['Anytime', [['C', 'Change camera'], ['T', 'Timeout'], ['Esc / P', 'Pause (Esc also cancels Auto)'], ['H / ?', 'This list']]]
@@ -2946,6 +3059,7 @@ document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (MP && !$('#netov').hidden) return;
   if (MP && !$('#coin').hidden){ const b = [...$('#coin').querySelectorAll('[data-c]')]; if (k === '1' && b[0]){ e.preventDefault(); b[0].click(); } if (k === '2' && b[1]){ e.preventDefault(); b[1].click(); } return; }
+  if (SCR === 'game' && THROW.on && /^[1-5]$/.test(k)){ e.preventDefault(); throwKey(+k); return; }
   if (SCR === 'game' && PRE){
     if (k === 'enter' || k === ' '){ e.preventDefault(); snapPresnap(); return; }
     if (k === 'escape'){ leavePresnap(); G.hot = null; showTablet('off', 'pass'); return; }
@@ -2987,6 +3101,7 @@ $('#press').onclick = () => toSetup(0);
 $('#camb').onclick = () => cycleCam();
 $('#autobar').onclick = () => cancelAuto();
 ov.addEventListener('click', e => {
+  if (THROW.on && G){ const sp = e.target.closest('.gp'); if (!sp) return; const i = EL[G.poss].indexOf(sp), n = THROW.ids.indexOf(i); if (n >= 0) throwKey(n + 1); return; }
   if (!PRE) return;
   const sp = e.target.closest('.gp'); if (!sp) return;
   const i = EL[G.poss].indexOf(sp); if (i >= 0) selectRcv(i);
