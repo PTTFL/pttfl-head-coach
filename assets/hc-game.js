@@ -10,7 +10,7 @@ const SHELL = `
   <div class="tlogo"><div id="tl-logo"></div><div class="hc">HEAD COACH</div><div class="yr">PTTFL · 2026 SEASON EDITION</div></div>
   <button class="press" id="press">PRESS START</button>
   <a class="press2" id="press2" href="multiplayer.html">HEAD-TO-HEAD ONLINE ▸</a>
-  <div class="tsub">Call every play from the sideline of the PTTFL stadium. Rosters are your league's current 2026 rosters.</div>
+  <div class="tsub">Call the play, then play it: throw, run and tackle in the PTTFL stadium. Rosters are your league's current 2026 rosters.</div>
   <div class="career" id="career"></div>
 </section>
 
@@ -248,7 +248,8 @@ const SPOT = {
   tent:  { x:-365, y:325, z:0, tilt:64, spin:-12, zoom:1.7 },
   goal:  { x:560, y:0, z:0, tilt:60, spin:30, zoom:1.35 }
 };
-let camIdx = store.get('hc-cam', 0); if (!CAMS[camIdx]) camIdx = 0;
+// Player mode plays best from behind the QB (up on the stick is always upfield); Head Coach from the broadcast booth
+let camIdx = store.get('hc-cam', store.get('hc-style', 'player') === 'player' && window.HC_MODE !== 'mp' ? 1 : 0); if (!CAMS[camIdx]) camIdx = 0;
 const cam = { x:0, y:0, z:0, tilt:38, spin:0, zoom:.55 }, camT = { ...cam };
 let camFollow = null, camSnap = false;
 const zf = () => innerWidth < 640 ? .64 : innerWidth < 1000 ? .84 : 1;
@@ -376,7 +377,9 @@ const MARK = `<defs>${Object.entries(COL).map(([k, c]) => `<marker id="ah${k}" v
 
 /* ---------------- game state ---------------- */
 let G = null;
-const SET = { u:store.get('hc-u', '10'), t:store.get('hc-t', '7'), qlen:store.get('hc-qlen', 5), diff:store.get('hc-diff', 'pro'), po:'bal', pd:'base' };
+const SET = { u:store.get('hc-u', '10'), t:store.get('hc-t', '7'), qlen:store.get('hc-qlen', 5), diff:store.get('hc-diff', 'pro'), po:'bal', pd:'base', style:store.get('hc-style', 'player') };
+// Player mode: you play every snap yourself (assets/hc-live.js). Head Coach: you call it and watch. Head-to-head stays Head Coach.
+const liveOn = () => !MP && typeof LIVE !== 'undefined' && LIVE && SET.style === 'player' && !(G && G.auto);
 if (!byId(SET.u)) SET.u = TEAMS[0].id;
 if (!byId(SET.t) || SET.t === SET.u) SET.t = TEAMS.find(t => t.id !== SET.u).id;
 const opp = s => s === 'u' ? 't' : 'u';
@@ -1770,7 +1773,7 @@ function setRoute(i, r){
   if (r === 'block' && G.hot.p === i) delete G.hot.p;
   drawRoutes(); renderPresnap();
 }
-function snapPresnap(){ if (!PRE) return; const k = PRE.k; leavePresnap(); userCall(k, true); }
+function snapPresnap(){ if (!PRE) return; const k = PRE.k; leavePresnap(); G.snapNow = true; userCall(k, true); }
 // the routes painted on the field, under the players
 function drawRoutes(){
   const svg = ov.querySelector('.rt-svg'); if (!svg || !PRE) return;
@@ -1788,6 +1791,7 @@ function drawRoutes(){
   svg.innerHTML = `<defs>${[['n', '#19E3C4'], ['p', '#FFE600'], ['s', '#FF2E88']].map(([k, c]) => `<marker id="rtarrow${k}" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="3" markerHeight="3" orient="auto"><path d="M0 0L6 3L0 6z" fill="${c}"/></marker>`).join('')}</defs>` + s;
 }
 async function runPlay(oK, dK){
+  if (liveOn()) return runLive(oK, dK);
   const R = resolve(oK, dK);
   G.recent = G.recent || { u:[], t:[] }; G.recent[R.off].push(oK); if (G.recent[R.off].length > 6) G.recent[R.off].shift();
   lastForm = '';
@@ -1819,17 +1823,37 @@ async function runPlay(oK, dK){
   G.hot = null;
   await applyResult(R, verdict);
 }
+/* Player mode: the snap is played out live, and its result goes through the same downs, clock and stats as always */
+async function runLive(oK, dK){
+  const off = G.poss, def = opp(off), OT = TM(off), DT = TM(def), P = OFF[oK], rp = repOf(off, oK), M = keyed(modOf(oK, dK), rp);
+  const qb = (OT.qb[0] || ['the quarterback'])[0], dst = (DT.dst[0] || ['the defense'])[0];
+  const R = { oK, dK, off, def, fm:P.fm, kind:'', yards:0, td:false, qb, dst, callE:callEdge(M), P, keyed:rp, M, side:G.flip ? -1 : 1, e:edgeOf(off, P) };
+  if (P.k === 'run'){ R.carrier = oK === 'sneak' ? qb : pickRB(OT)[0]; R.cIdx = oK === 'sneak' ? 6 : 7; }
+  G.recent = G.recent || { u:[], t:[] }; G.recent[off].push(oK); if (G.recent[off].length > 6) G.recent[off].shift();
+  const quick = !!G.snapNow; G.snapNow = false;
+  lastForm = '';
+  await jogTo(formFor(R.fm, dK), 520);
+  const L = await LIVE.play(R, { user:off === ME ? 'o' : 'd', autoSnap:quick });
+  if (!G) return;
+  Object.assign(R, L);
+  if (R.kind === 'run' && R.cIdx === 6) R.carrier = qb;
+  const uOff = R.off === 'u';
+  const ce = R.callE, verdict = ce > .6 ? (uOff ? 'l' : 'w') : ce < -.6 ? (uOff ? 'w' : 'l') : 'e';
+  G.calls[verdict]++;
+  G.hot = null;
+  await applyResult(R, verdict);
+}
 function canThrow(R, ch){ return !MP && R.P.k === 'pass' && R.off === ME && !G.auto && ch.px && R.routes && Object.keys(R.routes).some(k => k !== 'p'); }
 function throwKey(n){ if (!THROW.on) return false; const j = THROW.ids[n - 1]; if (j != null && THROW.req == null) THROW.req = j; return true; }
 function addStats(R){
   const so = G.st[R.off], sd = G.st[R.def];
   so.plays++;
-  if (R.P.k === 'run'){
+  if (R.P.k === 'run' || R.scramble){
     so.ratt++; so.ryds += R.yards; so.yds += R.yards;
     const p = pstat(R.off, R.carrier, R.cIdx === 6 ? 'QB' : 'RB'); p.ra++; p.ry += R.yards; if (R.td) p.rtd++;
   } else {
     const q = pstat(R.off, R.qb, 'QB');
-    if (R.kind === 'sack'){ so.sacks++; so.yds += R.yards; so.pyds += R.yards; }
+    if (R.kind === 'sack' || R.sackFum){ so.sacks++; so.yds += R.yards; so.pyds += R.yards; }
     else {
       so.att++; q.pa++;
       if (R.kind === 'cmp' || (R.kind === 'fum' && R.P.k === 'pass')){ so.cmp++; so.pyds += R.yards; so.yds += R.yards; q.pc++; q.py += R.yards; if (R.td) q.ptd++; const r = pstat(R.off, R.tgt, R.tPos); r.rc++; r.rcy += R.yards; if (R.td) r.rctd++; }
@@ -1941,13 +1965,23 @@ function fgRange(side){ const k = TM(side).rt.kick, w = windFor(side); return 60
 function fgProb(dist, side){ return clamp(.985 / (1 + Math.exp((dist - fgRange(side)) / 5)), .01, .985); }
 async function doKick(kind){
   const side = G.poss, isXP = kind === 'xp';
-  const y0 = isXP ? 15 : ytg(), dist = y0 + 17, p = fgProb(dist, side), good = rnd() < p;
+  const y0 = isXP ? 15 : ytg(), dist = y0 + 17, p = fgProb(dist, side);
+  let good = rnd() < p, short = !good && dist > fgRange(side) - 6 && rnd() < .6, aimOff = 0;
   const kick = (TM(side).k[0] || ['The kicker'])[0];
   if (isXP){ G.ball = side === 'u' ? 85 : 15; }
   lastForm = '';
   await jogTo(Object.assign(formFor('fg', 'fg')), 520);
+  const w = windFor(side);
+  if (liveOn() && side === ME){
+    // your kick: enough leg to get there, then keep the needle inside the uprights (a crosswind pushes it)
+    const reach = fgRange(side) + 7, need = clamp((dist - 17) / (reach - 17), .12, 1), tol = clamp(.36 - (dist - 20) * .005 - Math.abs(w.cross) * .005, .1, .34);
+    const km = await LIVE.kickMeter({ label:isXP ? 'EXTRA POINT' : `${dist}-YD FIELD GOAL`, need, tol, swing:4.4 - (TM(side).rt.kick - 78) * .05 });
+    if (!G) return;
+    const aim = km.aim + w.cross * .008 + (km.power > 1.01 ? (km.aim >= 0 ? 1 : -1) * (km.power - 1) * 2 : 0);
+    short = km.power < need; good = !short && Math.abs(aim) <= tol; aimOff = good ? 0 : aim * 30;
+  }
   await wait(220);
-  const w = windFor(side), F = { ytg:y0, good, short:!good && dist > fgRange(side) - 6 && rnd() < .6, drift:w.cross };
+  const F = { ytg:y0, good, short, drift:w.cross + aimOff };
   await animate(choreoFG(F));
   if (isXP){
     if (good){ G.sc[side] += 1; G.st[side].pts += 1; }
@@ -1971,6 +2005,12 @@ async function doKick(kind){
 async function doPunt(){
   const side = G.poss, y0 = ytg();
   let dist = Math.round(clamp(44 + gauss() * 5 + (TM(side).rt.kick - 78) * .15 + windFor(side).along * .3, 26, 66));
+  if (liveOn() && side === ME){
+    await jogTo(formFor('punt', 'punt'), 520);
+    const km = await LIVE.kickMeter({ label:'PUNT', need:.85, tol:.3, swing:4 });
+    if (!G) return;
+    dist = Math.round(clamp((44 + (TM(side).rt.kick - 78) * .15 + windFor(side).along * .3) * (.5 + .55 * Math.min(1, km.power)) - Math.abs(km.aim) * 9 + gauss() * 2, 18, 68));
+  }
   let tb = false, ret = 0;
   if (dist >= y0){ tb = true; dist = y0 + 6; }
   else { ret = rnd() < .25 ? 0 : clamp(Math.round(7 + gauss() * 5 + (rnd() < .04 ? 40 : 0)), 0, 80); if (dist - ret <= 0) ret = dist - 1; }
@@ -2041,12 +2081,12 @@ async function endQuarter(){
 function playText(R){
   const y = R.yards, yd = n => `${n} yd${Math.abs(n) === 1 ? '' : 's'}`;
   switch (R.kind){
-    case 'run': return R.td ? `${R.carrier} ${R.oK === 'sneak' ? 'sneaks in' : 'runs it in'} from ${yd(y)} out. TOUCHDOWN` : y > 0 ? `${R.carrier} ${R.oK === 'sweep' ? 'takes the toss' : 'runs'} for ${yd(y)}${R.oob ? ', out of bounds' : ''}` : y === 0 ? `${R.carrier} stopped for no gain` : `${R.carrier} dropped for a loss of ${yd(-y)}`;
+    case 'run': return R.scramble && !R.td ? `${R.carrier} scrambles${y > 0 ? ' for ' + yd(y) : y === 0 ? ', no gain' : ', loss of ' + yd(-y)}${R.oob ? ', out of bounds' : ''}` : R.td ? `${R.carrier} ${R.oK === 'sneak' ? 'sneaks in' : 'runs it in'} from ${yd(y)} out. TOUCHDOWN` : y > 0 ? `${R.carrier} ${R.oK === 'sweep' ? 'takes the toss' : 'runs'} for ${yd(y)}${R.oob ? ', out of bounds' : ''}` : y === 0 ? `${R.carrier} stopped for no gain` : `${R.carrier} dropped for a loss of ${yd(-y)}`;
     case 'cmp': return R.td ? `${R.qb} finds ${R.tgt} for a ${yd(y)} TOUCHDOWN` : `${R.qb} to ${R.tgt} for ${yd(y)}${R.oob ? ', out of bounds' : ''}`;
-    case 'inc': return `${R.qb} incomplete, intended for ${R.tgt}`;
+    case 'inc': return R.away ? `${R.qb} throws it away` : `${R.qb} incomplete, intended for ${R.tgt}`;
     case 'sack': return `${R.qb} sacked by the ${R.dst} for a loss of ${yd(-y)}`;
     case 'int': return `${R.qb} INTERCEPTED by the ${R.dst}${R.tb ? ' in the end zone' : ', returned ' + yd(R.ret)}`;
-    case 'fum': return `${R.carrier || R.tgt} FUMBLES — recovered by the ${R.dst}`;
+    case 'fum': return R.sackFum ? `${R.qb} strip-sacked, recovered by the ${R.dst}` : `${R.carrier || R.tgt} FUMBLES — recovered by the ${R.dst}`;
   }
   return '';
 }
@@ -2109,8 +2149,8 @@ function renderMenu(){
   if (MENU_VIEW === 'keys'){ box.style.maxWidth = '760px'; $('#pause h2').textContent = 'Controls'; $('#menu').innerHTML = keysPage(); $('#menu').querySelector('[data-m="b"]').onclick = () => { MENU_VIEW = 'menu'; renderMenu(); }; return; }
   if (MENU_VIEW === 'stats' && G){ box.style.maxWidth = '980px'; $('#pause h2').textContent = 'Game Stats'; $('#menu').innerHTML = statsPage(); $('#menu').querySelector('[data-m="b"]').onclick = () => { MENU_VIEW = 'menu'; renderMenu(); }; return; }
   box.style.maxWidth = '420px'; $('#pause h2').textContent = 'Paused';
-  $('#menu').innerHTML = `<button class="chip" data-m="r">Resume</button><button class="chip" data-m="st">Game Stats</button><button class="chip" data-m="ky">Controls</button><button class="chip" data-m="c">Camera: ${esc(CAMS[camIdx].name)}</button><button class="chip" data-m="s">Play Speed: ${SPEED > 1 ? 'Fast' : 'Normal'}</button><button class="chip" data-m="q">${MP ? 'Leave Game' : 'Quit to Title'}</button>`;
-  $('#menu').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = b.dataset.m; if (m === 'r') resume(); if (m === 'c'){ cycleCam(); renderMenu(); } if (m === 's'){ SPEED = SPEED > 1 ? 1 : 1.8; store.set('hc-speed', SPEED); renderMenu(); } if (m === 'q'){ if (MP) mpLeaveAsk(); else toTitle(); } if (m === 'st'){ MENU_VIEW = 'stats'; renderMenu(); } if (m === 'ky'){ MENU_VIEW = 'keys'; renderMenu(); } });
+  $('#menu').innerHTML = `<button class="chip" data-m="r">Resume</button><button class="chip" data-m="st">Game Stats</button><button class="chip" data-m="ky">Controls</button><button class="chip" data-m="c">Camera: ${esc(CAMS[camIdx].name)}</button><button class="chip" data-m="s">Play Speed: ${SPEED > 1 ? 'Fast' : 'Normal'}</button>${MP ? '' : `<button class="chip" data-m="sty">Play Style: ${SET.style === 'player' ? 'Player' : 'Head Coach'}</button>`}<button class="chip" data-m="q">${MP ? 'Leave Game' : 'Quit to Title'}</button>`;
+  $('#menu').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = b.dataset.m; if (m === 'r') resume(); if (m === 'c'){ cycleCam(); renderMenu(); } if (m === 's'){ SPEED = SPEED > 1 ? 1 : 1.8; store.set('hc-speed', SPEED); renderMenu(); } if (m === 'q'){ if (MP) mpLeaveAsk(); else toTitle(); } if (m === 'st'){ MENU_VIEW = 'stats'; renderMenu(); } if (m === 'ky'){ MENU_VIEW = 'keys'; renderMenu(); } if (m === 'sty'){ SET.style = SET.style === 'player' ? 'coach' : 'player'; store.set('hc-style', SET.style); toast(SET.style === 'player' ? 'PLAYER MODE · FROM THE NEXT SNAP' : 'HEAD COACH MODE · FROM THE NEXT SNAP'); renderMenu(); } });
 }
 function toTitle(){
   EPOCH++; PAUSED = false; PQ = []; const ab = $('#autobar'); if (ab) ab.hidden = true;
@@ -2187,11 +2227,13 @@ function renderPre(){
     + `<div class="panel opt"><div class="bar"><b>DEFENSE</b> // PHILOSOPHY</div><div class="chips">${chips(PLAN_D, SET.pd, 'pd')}</div><p>${PLAN_D[SET.pd][1]}</p></div>`
     + `<div class="panel opt"><div class="bar"><b>QUARTER</b> // LENGTH</div><div class="chips">${[3, 5, 8].map(n => `<button class="chip" aria-pressed="${n === SET.qlen}" data-ql="${n}">${n} Min</button>`).join('')}</div><p>${SET.qlen === 3 ? 'Quick game, about 4 minutes.' : SET.qlen === 5 ? 'About 6–8 minutes of play calling.' : 'Long game, about 12 minutes.'}</p></div>`
     + `<div class="panel opt"><div class="bar"><b>OPPONENT</b> // COACHING</div><div class="chips">${[['rookie', 'Rookie'], ['pro', 'Pro'], ['allpro', 'All-Pro']].map(([k, l]) => `<button class="chip" aria-pressed="${k === SET.diff}" data-df="${k}">${l}</button>`).join('')}</div><p>${SET.diff === 'rookie' ? 'Predictable play calls, ratings knocked down.' : SET.diff === 'pro' ? 'A real coordinator who learns your tendencies.' : 'Reads your tendencies and counters them. Ratings bumped up.'}</p></div>`
+    + `<div class="panel opt"><div class="bar"><b>PLAY STYLE</b> // ON THE FIELD</div><div class="chips">${[['player', 'Player'], ['coach', 'Head Coach']].map(([k, l]) => `<button class="chip" aria-pressed="${k === SET.style}" data-sty="${k}">${l}</button>`).join('')}</div><p>${SET.style === 'player' ? 'Call it, then play it: throw with the meter, run with jukes and spins, take a defender and make the tackle. Press H in a game for the controls.' : 'Call the play and watch it from the sideline.'}</p></div>`
     + `<div class="go-row" style="grid-column:1/-1"><button class="pb pill big" id="kick"><i class="ps x">✕</i>Kick Off</button></div>`;
   $('#opts').querySelectorAll('[data-po]').forEach(b => b.onclick = () => { SET.po = b.dataset.po; renderPre(); });
   $('#opts').querySelectorAll('[data-pd]').forEach(b => b.onclick = () => { SET.pd = b.dataset.pd; renderPre(); });
   $('#opts').querySelectorAll('[data-ql]').forEach(b => b.onclick = () => { SET.qlen = +b.dataset.ql; store.set('hc-qlen', SET.qlen); renderPre(); });
   $('#opts').querySelectorAll('[data-df]').forEach(b => b.onclick = () => { SET.diff = b.dataset.df; store.set('hc-diff', SET.diff); renderPre(); });
+  $('#opts').querySelectorAll('[data-sty]').forEach(b => b.onclick = () => { SET.style = b.dataset.sty; store.set('hc-style', SET.style); renderPre(); });
   $('#kick').onclick = () => startGame();
 }
 async function startGame(){
@@ -2306,13 +2348,24 @@ function playerTable(side){
   const body = sec('Passing', qb) + sec('Rushing', ru) + sec('Receiving', rc);
   return `<div class="tbl"><table class="stats pl ${side}"><thead><tr><th colspan="2">${esc(TN(TM(side)))}</th></tr></thead><tbody>${body || '<tr><td colspan="2">No stats yet</td></tr>'}</tbody></table></div>`;
 }
-const KEYS = [
+const KEYS_HC0 = [
   ['Play call', [['1–9', 'Pick a card'], ['Enter / Space', "Call the coordinator's pick"], ['R', 'Run plays'], ['F', 'Pass plays'], ['Backspace', 'Back to Run / Pass'], ['M', 'Flip the play'], ['A', 'OC / DC Auto on or off'], ['U', 'Audibles on or off']]],
   ['During your pass play', [['1–5', 'Throw it to that receiver (same numbers as at the line; shown on the name plates)'], ['Tap a receiver', 'Throw it to him']]],
   ['Special teams', [['K', 'Field goal / extra point'], ['N', 'Punt'], ['X', 'Go for two'], ['V', 'Kneel']]],
   ['At the line (audibles)', [['1–5', 'Select a receiver'], ['0–9', 'Pick a route off the tree'], ['T', 'Make him the primary target'], ['M', 'Flip the play'], ['S', 'Save the play'], ['Enter / Space', 'Snap'], ['Esc', 'Change play']]],
   ['Anytime', [['C', 'Change camera'], ['T', 'Timeout'], ['Esc / P', 'Pause (Esc also cancels Auto)'], ['H / ?', 'This list']]]
 ];
+const KEYS_HC = KEYS_HC0;
+const KEYS = MP ? KEYS_HC : [
+  ['Player mode · at the line', [['Space', 'Snap the ball (CPU snaps when you are on defense)'], ['Tab', 'Defense: pick your man before the snap']]],
+  ['Player mode · quarterback', [['1–5', 'Throw to that receiver. Tap = lob over the top; hold = bullet, let go when the needle is in the green'], ['WASD / Arrows', 'Move in the pocket or scramble; held while throwing, leads the receiver'], ['Shift', 'Sprint'], ['X', 'Throw it away'], ['Tap a receiver', 'Lob it to him']]],
+  ['Player mode · with the ball', [['WASD / Arrows', 'Run'], ['Shift', 'Sprint (tires him out)'], ['Q / E', 'Juke left / right (best just before contact)'], ['Space', 'Spin'], ['F', 'Stiff arm'], ['Z', 'Dive forward / QB slide']]],
+  ['Player mode · defense', [['WASD / Arrows', 'Move (the CPU plays your man until you touch it)'], ['Tab / Q', 'Switch to the man nearest the ball'], ['Space', 'Dive tackle'], ['E', 'Hit stick: big hit, can jar it loose'], ['X', 'Play the ball when it is in the air'], ['F', 'Shed a block']]],
+  ['Player mode · kicking', [['Hold Space', 'Power: let go at the line in the meter'], ['Space again', 'Aim: stop the needle in the middle']]],
+  ['Player mode · gamepad', [['LS', 'Move'], ['RT', 'Sprint'], ['A B X Y RB', 'Receivers 1–5'], ['B / Y / X', 'Spin / stiff arm / dive'], ['RS or LB RB', 'Juke'], ['A / B / X / Y', 'Defense: switch / tackle / hit stick / play the ball']]],
+  ...KEYS_HC0
+];
+
 function keysPage(){
   return `<div class="statpg"><div class="keys">${KEYS.map(([h, rows]) => `<div class="kgrp"><span class="hud">${h}</span>${rows.map(([k, d]) => `<div class="krow"><span>${k.split(' / ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</span><em>${esc(d)}</em></div>`).join('')}</div>`).join('')}</div><button class="chip" data-m="b">◂ Back</button></div>`;
 }
@@ -3107,6 +3160,14 @@ ov.addEventListener('click', e => {
   const i = EL[G.poss].indexOf(sp); if (i >= 0) selectRcv(i);
 });
 addEventListener('resize', () => { camSnap = true; });
+
+/* ---------------- Player mode engine ---------------- */
+const LIVE = window.HC_LIVE ? window.HC_LIVE({
+  get G(){ return G; }, get ME(){ return ME; }, TM, ytg, wdir, fieldX, forms, skillPlayers, playTree, routeKeysFor, defDepth, unitR, defR,
+  clamp, lerp, rnd, gauss, put, EL, camGame, cam, ov, THROW, esc, last, pauseGame,
+  epoch:() => EPOCH, paused:() => PAUSED, eligible:k => eligibleFor(k), posName:i => POSN[i] || 'OL'
+}) : null;
+window.__hcLive = { get LIVE(){ return LIVE; }, get G(){ return G; }, OFF, DEF, modOf, keyed, callEdge, edgeOf, pickRB, repOf, TM, opp, get SET(){ return SET; }, newGame:L => newGame(L), set G(v){ G = v; }, ytg };
 
 /* ---------------- boot ---------------- */
 buildStadium();
