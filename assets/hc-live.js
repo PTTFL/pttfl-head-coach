@@ -1420,9 +1420,9 @@ function kickMeter(opt = {}){
         const pb = !!(gp && gp.buttons[0] && gp.buttons[0].pressed); if (pb && !padWas) down(); if (!pb && padWas) up(); padWas = pb;
         if (ph === 1){ const m = clamp((now - t0) / 1000 / .9, 0, 1.06); u.fill.style.transform = `scaleX(${(m / 1.08).toFixed(3)})`; u.needle.style.left = (m / 1.08 * 100) + '%'; if (m >= 1.06) up(); }
         if (ph === 2){
-          // the aim needle swings across; the middle is dead straight
-          const k = (now - t0) / 1000;
-          aimV = Math.sin(k * (opt.swing || 4.2)) * 1;
+          // the aim needle sweeps steadily side to side; the middle is dead straight
+          const k = (now - t0) / 1000, ph2 = (k / (opt.period || .8)) % 2;
+          aimV = ph2 < 1 ? -1 + 2 * ph2 : 3 - 2 * ph2;
           u.needle.style.left = (50 + aimV * 48) + '%'; u.fill.style.transform = 'scaleX(0)';
           u.band.style.left = (50 - (opt.tol || .25) * 48) + '%'; u.band.style.width = ((opt.tol || .25) * 96) + '%';
           if (k > 4) finish();
@@ -1436,6 +1436,6 @@ function kickMeter(opt = {}){
   });
 }
 
-return { play, kickMeter, get busy(){ return !!S; } };
+return { play, kickMeter, get busy(){ return !!S; }, get _S(){ return S; } };
 };
 })();

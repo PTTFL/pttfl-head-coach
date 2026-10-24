@@ -249,7 +249,8 @@ const SPOT = {
   goal:  { x:560, y:0, z:0, tilt:60, spin:30, zoom:1.35 }
 };
 // Player mode plays best from behind the QB (up on the stick is always upfield); Head Coach from the broadcast booth
-let camIdx = store.get('hc-cam', store.get('hc-style', 'player') === 'player' && window.HC_MODE !== 'mp' ? 1 : 0); if (!CAMS[camIdx]) camIdx = 0;
+let camIdx = store.get('hc-cam', 0); if (!CAMS[camIdx]) camIdx = 0;
+if (window.HC_MODE !== 'mp' && store.get('hc-style', 'player') === 'player' && !store.get('hc-pcam', false)){ camIdx = 1; store.set('hc-cam', 1); store.set('hc-pcam', true); }
 const cam = { x:0, y:0, z:0, tilt:38, spin:0, zoom:.55 }, camT = { ...cam };
 let camFollow = null, camSnap = false;
 const zf = () => innerWidth < 640 ? .64 : innerWidth < 1000 ? .84 : 1;
@@ -1974,8 +1975,9 @@ async function doKick(kind){
   const w = windFor(side);
   if (liveOn() && side === ME){
     // your kick: enough leg to get there, then keep the needle inside the uprights (a crosswind pushes it)
-    const reach = fgRange(side) + 7, need = clamp((dist - 17) / (reach - 17), .12, 1), tol = clamp(.36 - (dist - 20) * .005 - Math.abs(w.cross) * .005, .1, .34);
-    const km = await LIVE.kickMeter({ label:isXP ? 'EXTRA POINT' : `${dist}-YD FIELD GOAL`, need, tol, swing:4.4 - (TM(side).rt.kick - 78) * .05 });
+    const reach = fgRange(side) + 7, need = clamp((dist - 17) / (reach - 17), .12, 1), tol = clamp(.4 - (dist - 20) * .007 - Math.abs(w.cross) * .004, .1, .38);
+    // a better kicker's needle moves slower
+    const km = await LIVE.kickMeter({ label:isXP ? 'EXTRA POINT' : `${dist}-YD FIELD GOAL`, need, tol, period:.75 + (TM(side).rt.kick - 78) * .012 });
     if (!G) return;
     const aim = km.aim + w.cross * .008 + (km.power > 1.01 ? (km.aim >= 0 ? 1 : -1) * (km.power - 1) * 2 : 0);
     short = km.power < need; good = !short && Math.abs(aim) <= tol; aimOff = good ? 0 : aim * 30;
@@ -2007,7 +2009,7 @@ async function doPunt(){
   let dist = Math.round(clamp(44 + gauss() * 5 + (TM(side).rt.kick - 78) * .15 + windFor(side).along * .3, 26, 66));
   if (liveOn() && side === ME){
     await jogTo(formFor('punt', 'punt'), 520);
-    const km = await LIVE.kickMeter({ label:'PUNT', need:.85, tol:.3, swing:4 });
+    const km = await LIVE.kickMeter({ label:'PUNT', need:.85, tol:.3, period:.8 });
     if (!G) return;
     dist = Math.round(clamp((44 + (TM(side).rt.kick - 78) * .15 + windFor(side).along * .3) * (.5 + .55 * Math.min(1, km.power)) - Math.abs(km.aim) * 9 + gauss() * 2, 18, 68));
   }
@@ -3167,7 +3169,7 @@ const LIVE = window.HC_LIVE ? window.HC_LIVE({
   clamp, lerp, rnd, gauss, put, EL, camGame, cam, ov, THROW, esc, last, pauseGame,
   epoch:() => EPOCH, paused:() => PAUSED, eligible:k => eligibleFor(k), posName:i => POSN[i] || 'OL'
 }) : null;
-window.__hcLive = { get LIVE(){ return LIVE; }, get G(){ return G; }, OFF, DEF, modOf, keyed, callEdge, edgeOf, pickRB, repOf, TM, opp, get SET(){ return SET; }, newGame:L => newGame(L), set G(v){ G = v; }, ytg };
+window.__hcLive = { get LIVE(){ return LIVE; }, get G(){ return G; }, OFF, DEF, modOf, keyed, callEdge, edgeOf, pickRB, repOf, TM, opp, get SET(){ return SET; }, newGame:L => newGame(L), set G(v){ G = v; }, ytg, test:{ doKick:k => doKick(k), doPunt:() => doPunt() } };
 
 /* ---------------- boot ---------------- */
 buildStadium();
