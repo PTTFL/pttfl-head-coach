@@ -328,6 +328,29 @@ function assignPassPro(){
   }
   for (const x of R){ const n = B.filter(b => b.target === x).length; x.dbl = n >= 2; }
 }
+/* Pass protection adjusts after the snap: anybody who comes across the line late (a delayed blitz, or a linebacker you
+   take at the quarterback yourself) becomes a rusher, and the nearest blocker who isn't tied up with his own man (a
+   lineman helping on a double team, a free lineman, the back or tight end staying in) slides over and picks him up. */
+function pickups(){
+  if (S.run || S.thrown || S.holder !== S.QB || S.scramble || S.R.oK === 'screen') return;
+  for (const x of S.D)
+    if (!S.rushers.includes(x) && x.down <= 0 && x.p[0] < 26 && (x === S.ctl || x.vel[0] < -25)){ S.rushers.push(x); x.late = true; }
+  const blocked = x => S.O.some(b => b.target === x && !b.help && b.role === 'pblk' && b.down <= 0 && dist(b.p, x.p) < 70);
+  for (const x of S.rushers){
+    if (x.eng || x.down > 0 || x.p[0] > 45 || blocked(x)) continue;
+    let best = null, bd = 1e9;
+    for (const b of S.O){
+      if (b.role !== 'pblk' || b.down > 0 || b.stun > 0) continue;
+      const busy = b.target && !b.help && !b.scan && b.target !== x && b.target.down <= 0 && !(b.target.eng && b.target.eng !== b);
+      if (busy || (b.eng && !b.dbl)) continue;
+      const d = dist(b.p, x.p); if (d < bd && d < 85){ bd = d; best = b; }
+    }
+    if (!best) continue;
+    // let go of the double team to take the new man
+    if (best.eng && best.eng.eng2 === best){ best.eng.eng2 = null; best.eng = null; best.dbl = false; }
+    best.target = x; best.help = false; best.scan = false;
+  }
+}
 function assignRunBlocks(){
   const B = S.O.filter(p => p.role === 'rblk'), DL = S.D.filter(x => x.i <= 3 || (x.role === 'rush' && x.i > 3));
   const pairs = [];
@@ -602,7 +625,8 @@ function aiOffense(p){
       const g = S.QB.p, n = nrm(g[0] - x.p[0], g[1] - x.p[1]);
       const spot = [x.p[0] + n[0] * 11, x.p[1] + n[1] * 11];
       seek(p, spot, 1);
-      if (dist(p.p, x.p) < 13 && x.down <= 0 && (!x.eng || p.help) && !(x.shed && S.t - x.shed < .6)) engage(p, x);
+      // a man running right past him gets caught: blockers reach out, they don't wait to be run into
+      if (dist(p.p, x.p) < (x.late ? 18 : 14) && x.down <= 0 && (!x.eng || p.help) && !(x.shed && S.t - x.shed < .6)) engage(p, x);
       return;
     }
     case 'rblk': {
@@ -1141,7 +1165,12 @@ function userTick(){
     }
     if (IN.hit.has('e') && h && h.team !== c.team){ const dd = dist(c.p, h.p); if (dd < 17 && S.t - c.tried > .3) tackleTry(c, h, 'hit'); }
     if (IN.hit.has('x') && B.st === 'air'){ c.jump = S.t; if (B.kind === 'pass' && dist(c.p, B.to) < 30) c.ballSeen = Math.min(c.ballSeen || 9, S.t); }
-    if (IN.hit.has('f') && c.eng){ if (S.t > (c.shedTry || 0)){ c.shedTry = S.t + .9; if (rnd() < .38 + (c.str - .5) * .5){ unlock(c, true); callout('SHED!', 'g'); } } }
+    // shedding a block: you need to have fought him a moment first, the odds depend on strength against strength, and a
+    // miss leaves you waiting a beat before you can try again
+    if (IN.hit.has('f') && c.eng && S.t - (c.engT || 0) > .45){
+      if (S.t > (c.shedTry || 0)){ const bk = c.eng; c.shedTry = S.t + 1.2;
+        if (rnd() < clamp(.13 + (c.str - (bk ? bk.str : .5)) * .5 - (bk && bk.dbl ? .08 : 0), .05, .26)){ unlock(c, true); callout('SHED!', 'g'); H.rumble(.4, .3, 120); }
+        else callout('STONEWALLED', 'b'); } }
   }
 }
 /* Throwing: tap a receiver's button for a quick lob to where he's headed. Hold it to aim: a circle appears where the
@@ -1219,6 +1248,9 @@ function step(){
   S.t += DT;
   if (S.end){ S.deadT += DT; for (const p of S.all){ if (!p.eng){ p.want = [p.vel[0] * .8, p.vel[1] * .8]; } integrate(p); } ballStep(); if (S.deadT > (S.end === 'td' || S.end === 'pick6' ? 1.25 : .85)) S.done = true; clearEdges(); return; }
   if (S.userSide) userTick();
+  // test hook: a scripted player who takes one defender straight at the quarterback, mashing shed
+  if (S.bot && S.ctl && !S.end){ const c = S.ctl, g = S.holder || S.QB, n = nrm(g.p[0] - c.p[0], g.p[1] - c.p[1]); c.want = [n[0] * c.vmax, n[1] * c.vmax]; S.userMoved = true; S.lastIn = S.t;
+    if (c.eng && S.bot.shed && S.t > (c.shedTry || 0)){ IN.hit.add('f'); userTick(); } }
   // the exchange: handoff, pitch, sneak
   if (S.run && S.handoff < 0 && S.holder === S.QB){
     const Q = S.QB, RB = S.RB, k = S.oK;
@@ -1236,6 +1268,7 @@ function step(){
   }
   for (const x of S.D){ if (S.ctl === x && S.userMoved) continue; aiDefense(x); }
   blocks();
+  pickups();
   for (const p of S.all) integrate(p);
   separate();
   for (const p of S.all){ p.hist.push(p.p.slice()); if (p.hist.length > 50) p.hist.shift(); }
@@ -1371,11 +1404,12 @@ function render(){
 function play(R, opt = {}){
   S = build(R, opt);
   if (opt.trace) S.dbg = [];
-  S.noThrow = !!opt.noThrow;
+  S.noThrow = !!opt.noThrow; S.bot = opt.bot || null;
   S.cpuSnap = 1.3 + rnd() * .5; S.autoSnap = !!opt.autoSnap;
   if (opt.headless || !S.userSide){ if (!opt.headless) S.cpuSnap = .35; }
   if (opt.headless){
     S.phase = 'pre'; snap();
+    if (opt.bot){ S.userSide = 'd'; setCtl(S.D[opt.bot.j]); }
     let n = 0; const tr = opt.trace ? [] : null;
     while (!S.done && n < 60 * 30){ step(); n++; if (tr && n % 6 === 0) tr.push({ t:+S.t.toFixed(2), O:S.O.map(p => [Math.round(p.p[0]), Math.round(p.p[1]), p.role, p.eng ? 1 : 0, p.down > 0 ? 1 : 0]), D:S.D.map(p => [Math.round(p.p[0]), Math.round(p.p[1]), p.role, p.eng ? 1 : 0, p.down > 0 ? 1 : 0]), b:[Math.round(S.ball.p[0]), Math.round(S.ball.p[1]), S.ball.st, Math.round(S.ball.z || 0)], h:S.holder ? (S.holder.team + S.holder.i) : '' }); }
     const r = result(); r.thrT = S.thrT; r.tA = S.tA || 0; r.fa = S.fa; r.tP = S.tP || 0; r.tK = S.tK || {}; if (tr){ r.trace = tr; r.goalU = S.goalU; r.end = S.end; r.dbg = S.dbg; } S = null; return Promise.resolve(r);
