@@ -65,7 +65,6 @@ function onKey(e){
   if (!b) return;
   // leave the menu and camera keys to the game
   e.preventDefault(); e.stopPropagation();
-  IN.pad = false;
   if (e.type === 'keydown'){ if (!e.repeat) press(b); } else release(b);
 }
 function onBlur(){ for (const b of [...IN.held]) release(b); }
@@ -77,23 +76,29 @@ function pollPad(){
   let lx = ax(0), ly = ax(1);
   if (B(12)) ly = -1; if (B(13)) ly = 1; if (B(14)) lx = -1; if (B(15)) lx = 1;
   IN.padStick = hyp(lx, ly) > .22 ? [lx, ly] : null;
-  if (IN.padStick || gp.buttons.some(b => b && b.pressed)) IN.pad = true;
+  if (IN.padStick || gp.buttons.some(b => b && b.pressed) || hyp(ax(2), ax(3)) > .5) H.setPad(true);
+  /* Xbox layout, Madden style (standard mapping: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 10 LS, 11 RS).
+     QB: A B X Y RB throw to receivers 1-5, LB or RS click throws it away. Ball carrier: A stiff arm, B spin, X dive,
+     LB / RB or the right stick juke. Defense: B switch, X dive tackle, Y play the ball, A shed, LB or right stick up hit stick.
+     RT sprints everywhere. Menu (pause) belongs to the game. */
   const ctx = S ? context() : '';
   const map = {};
   if (ctx === 'pre') map[0] = 'act';
-  else if (ctx === 'qb'){ map[0] = 't1'; map[1] = 't2'; map[2] = 't3'; map[3] = 't4'; map[5] = 't5'; map[4] = 'x'; map[7] = 'spr'; }
-  else if (ctx === 'car'){ map[1] = 'act'; map[3] = 'f'; map[2] = 'z'; map[4] = 'q'; map[5] = 'e'; map[7] = 'spr'; }
-  else if (ctx === 'def'){ map[0] = 'sw'; map[1] = 'act'; map[3] = 'x'; map[2] = 'e'; map[5] = 'f'; map[7] = 'spr'; }
+  else if (ctx === 'qb'){ map[0] = 't1'; map[1] = 't2'; map[2] = 't3'; map[3] = 't4'; map[5] = 't5'; map[4] = 'x'; map[11] = 'x'; map[7] = 'spr'; }
+  else if (ctx === 'car'){ map[0] = 'f'; map[1] = 'act'; map[2] = 'z'; map[4] = 'q'; map[5] = 'e'; map[7] = 'spr'; }
+  else if (ctx === 'def'){ map[1] = 'sw'; map[2] = 'act'; map[3] = 'x'; map[0] = 'f'; map[4] = 'e'; map[7] = 'spr'; }
   const now = {};
   for (const i in map) now[map[i]] = (now[map[i]] || false) || B(+i);
   // right stick: jukes for a runner, hit stick on defense
   const rx = ax(2), ry = ax(3);
   if (ctx === 'car'){ now.q = now.q || rx < -.65; now.e = now.e || rx > .65; }
   if (ctx === 'def') now.e = now.e || ry < -.7;
+  // a button still held from calling the play doesn't count until it has been let go once
+  if (IN.padWait){ if (!gp.buttons.some(b => b && b.pressed)) IN.padWait = false; IN.padPrev = now; return; }
   for (const b in now){ const was = !!IN.padPrev[b]; if (now[b] && !was) press(b); if (!now[b] && was) release(b); }
   IN.padPrev = now;
-  if (B(9) && !IN.padStart){ IN.padStart = true; H.pauseGame(); } else if (!B(9)) IN.padStart = false;
 }
+const padOn = () => H.padMode();
 // the stick, as a vector in the offense's frame (screen-relative, so "up" is always up on your screen)
 function stick(){
   let sx = 0, sy = 0;
@@ -133,27 +138,27 @@ const HINT = {
   none:[]
 };
 const PADH = {
-  pre:[['A', 'Snap']],
-  qb:[['A B X Y RB', 'Receivers 1–5 · tap lob, hold bullet'], ['LS', 'Move · aim'], ['RT', 'Sprint'], ['LB', 'Throw away']],
-  car:[['LS', 'Run'], ['RT', 'Sprint'], ['RS / LB RB', 'Juke'], ['B', 'Spin'], ['Y', 'Stiff arm'], ['X', 'Dive']],
-  def:[['LS', 'Move'], ['RT', 'Sprint'], ['A', 'Switch'], ['B', 'Tackle'], ['X / RS↑', 'Hit stick'], ['Y', 'Play the ball'], ['RB', 'Shed']],
+  pre:[['A', 'Snap'], ['X', 'Camera']],
+  qb:[['A B X Y RB', 'Throw to him · tap = lob, hold = bullet (let go in the green)'], ['LS', 'Move · lead the throw'], ['RT', 'Sprint'], ['LB', 'Throw it away']],
+  car:[['LS', 'Run'], ['RT', 'Sprint'], ['LB RB', 'Juke (or flick RS)'], ['B', 'Spin'], ['A', 'Stiff arm'], ['X', 'Dive / slide']],
+  def:[['LS', 'Move'], ['RT', 'Sprint'], ['B', 'Switch'], ['X', 'Dive tackle'], ['LB', 'Hit stick (or RS up)'], ['Y', 'Play the ball'], ['A', 'Shed block']],
   none:[]
 };
 let lastCtx = '';
 function showControls(ctx){
-  const key = ctx + (IN.pad ? 'p' : 'k') + (S && S.ids ? S.ids.length : 0);
+  const pad = padOn(), key = ctx + (pad ? 'p' : 'k') + (S && S.ids ? S.ids.length : 0);
   if (key === lastCtx) return; lastCtx = key;
   const u = ui();
-  const list = (IN.pad ? PADH : HINT)[ctx] || [];
-  u.hint.hidden = !list.length || isTouch();
-  u.hint.innerHTML = list.map(([k, d]) => `<span><kbd>${H.esc(k)}</kbd>${H.esc(d)}</span>`).join('');
+  const list = (pad ? PADH : HINT)[ctx] || [];
+  u.hint.hidden = !list.length || (isTouch() && !pad);
+  u.hint.innerHTML = list.map(([k, d]) => `<span>${pad ? k.split(' ').map(H.xbBtn).join('') : `<kbd>${H.esc(k)}</kbd>`}${H.esc(d)}</span>`).join('');
   const tb = (TBTN[ctx] || []).filter(b => ctx !== 'qb' || !/^t\d$/.test(b[0]) || +b[0][1] <= S.ids.length);
-  u.touch.hidden = !isTouch() || !tb.length;
+  u.touch.hidden = !isTouch() || pad || !tb.length;
   u.btns.innerHTML = tb.map(([b, l, c]) => `<button type="button" class="lv-b${c ? ' ' + c : ''}${/^t\d$/.test(b) ? ' rcv' : ''}" data-b="${b}">${l}</button>`).join('');
 }
 
 /* ---------------- the play ---------------- */
-let S = null;
+let S = null, KICKING = false;
 // zone landmarks: [depth, width, radius, deep?]
 const ZN = { deepL:[200,-175,120,1], deepM:[225,0,120,1], deepR:[200,175,120,1], halfL:[190,-125,140,1], halfR:[190,125,140,1],
   q1:[215,-200,95,1], q2:[230,-70,95,1], q3:[230,70,95,1], q4:[215,200,95,1],
@@ -566,6 +571,7 @@ function intercept(x, B){
   holdBy(x); S.carrier = x; S.intAt = { u:x.p[0], at:S.t }; S.chase = S.t;
   x.vel = [-Math.abs(x.vel[0]) * .4, x.vel[1] * .4];
   callout('INTERCEPTED!', S.userSide === 'd' ? 'g' : 'b');
+  if (!S.headless) H.rumble(.7, .7, 280);
   for (const p of S.all){ p.eng = null; p.eng2 = null; p.isB = false; p.target = null; }
   for (const p of S.O){ p.role = 'pursue'; p.react = .2 + rnd() * .4; }
   for (const q of S.D){ if (q !== x) q.role = 'dblk'; }
@@ -995,6 +1001,7 @@ function doMove(p, m){
     p.vel = [f[0] * sp * .62 + side[0] * lat, f[1] * sp * .62 + side[1] * lat];
     p.want = [p.vel[0], p.vel[1]];
   } else { p.vel = [p.vel[0] * M.slow, p.vel[1] * M.slow]; }
+  if (!S.headless && p === S.ctl) H.rumble(.15, .45, 90);
   if (m === 'dive'){ const f = sp > 5 ? nrm(p.vel[0], p.vel[1]) : [p.team === 'o' ? 1 : -1, 0]; p.vel = [f[0] * 120, f[1] * 120]; p.diving = S.t; }
   return true;
 }
@@ -1037,6 +1044,7 @@ function tackleTry(q, c, kind){
     if (c.diving) fum = 0;
     if (rnd() < fum){ fumble(c, q); return true; }
     if (kind === 'hit') callout('BIG HIT!', q.team === S.userSide ? 'g' : 'b');
+    if (!S.headless && (c === S.ctl || q === S.ctl || c.team === S.userSide)) H.rumble(kind === 'hit' ? 1 : .55, kind === 'hit' ? .6 : .3, kind === 'hit' ? 260 : 150);
     S.tackler = q;
     endPlay('tackle');
     return true;
@@ -1050,6 +1058,7 @@ function tackleTry(q, c, kind){
 }
 function fumble(c, q){
   callout('FUMBLE!', q.team === S.userSide ? 'g' : 'b');
+  if (!S.headless) H.rumble(.9, .7, 300);
   S.fumbleBy = c; S.holder = null;
   const n = nrm(c.vel[0], c.vel[1]);
   S.ball = { st:'loose', from:c.p.slice(), to:[c.p[0] + n[0] * 12 + (rnd() - .5) * 26, clamp(c.p[1] + n[1] * 12 + (rnd() - .5) * 26, -270, 270)], T0:S.t, last:c.team, p:c.p.slice(), z:6 };
@@ -1258,6 +1267,7 @@ function endPlay(how){
   if (how === 'tackle' && S.holder && S.holder.team === 'd') S.end = 'int';
   if (how === 'oob' && S.holder && S.holder.team === 'd') S.end = 'int';
   S.endSpot = S.holder ? S.holder.p.slice() : S.ball.p.slice();
+  if (!S.headless && (how === 'td' || how === 'pick6')) H.rumble(.35, 1, 450);
   H.THROW.on = false; H.THROW.ver++;
   if (!S.headless){ const u = ui(); u.meter.hidden = true; }
 }
@@ -1333,7 +1343,7 @@ function render(){
     u.fill.style.transform = `scaleX(${m.toFixed(3)})`;
     u.band.style.left = ((id.c - id.hw) / 1.08 * 100).toFixed(1) + '%'; u.band.style.width = (id.hw * 2 / 1.08 * 100).toFixed(1) + '%';
     u.needle.style.left = (m * 100).toFixed(1) + '%';
-    u.mlbl.textContent = `${S.hold.n} · ${(S.hold.r.name ? H.last(S.hold.r.name) : H.posName(S.hold.r.i)).toUpperCase()}`;
+    u.mlbl.textContent = `${padOn() ? ['A', 'B', 'X', 'Y', 'RB'][S.hold.n - 1] : S.hold.n} · ${(S.hold.r.name ? H.last(S.hold.r.name) : H.posName(S.hold.r.i)).toUpperCase()}`;
   }
   // the camera follows the ball
   const fx = W(B.st === 'air' ? lerp(B.p[0], B.to[0], .35) : B.p[0], 0)[0];
@@ -1342,7 +1352,8 @@ function render(){
   const ctx = context();
   if (S.phase === 'pre'){
     u.prompt.hidden = false;
-    u.prompt.innerHTML = S.userSide === 'o' ? `<b>${isTouch() ? 'TAP SNAP' : IN.pad ? 'PRESS A' : 'PRESS SPACE'}</b> TO SNAP THE BALL` : `<b>DEFENSE</b> · ${isTouch() ? 'TAP SWITCH' : IN.pad ? 'A' : 'TAB'} TO PICK YOUR MAN`;
+    const pad = padOn();
+    u.prompt.innerHTML = S.userSide === 'o' ? `<b>${pad ? 'PRESS ' + H.xbBtn('A') : isTouch() ? 'TAP SNAP' : 'PRESS SPACE'}</b> TO SNAP THE BALL` : `<b>DEFENSE</b> · ${pad ? H.xbBtn('B') : isTouch() ? 'TAP SWITCH' : 'TAB'} TO PICK YOUR MAN`;
   } else u.prompt.hidden = true;
   showControls(ctx);
 }
@@ -1361,7 +1372,7 @@ function play(R, opt = {}){
   }
   ui();
   lastCtx = '';
-  IN.held.clear(); IN.hit.clear(); IN.up.clear(); IN.padPrev = {};
+  IN.held.clear(); IN.hit.clear(); IN.up.clear(); IN.padPrev = {}; IN.padWait = true;
   addEventListener('keydown', onKey, true); addEventListener('keyup', onKey, true); addEventListener('blur', onBlur);
   if (S.userSide === 'd') setCtl(S.D[COV[S.dK] && COV[S.dK].rush.includes(5) ? 4 : 5]);
   return new Promise(res => {
@@ -1394,10 +1405,11 @@ function kickMeter(opt = {}){
     let ph = 0, t0 = 0, pw = 0, acc = 0, holding = false, last = performance.now();
     const epoch = H.epoch();
     u.meter.hidden = false; u.meter.classList.add('kick'); u.prompt.hidden = false;
-    u.prompt.innerHTML = `<b>${isTouch() ? 'HOLD KICK' : 'HOLD SPACE'}</b> FOR POWER, LET GO, THEN PRESS AGAIN TO AIM`;
+    KICKING = true;
+    u.prompt.innerHTML = padOn() ? `<b>HOLD ${H.xbBtn('A')}</b> FOR POWER, LET GO, THEN ${H.xbBtn('A')} AGAIN TO AIM` : `<b>${isTouch() ? 'HOLD KICK' : 'HOLD SPACE'}</b> FOR POWER, LET GO, THEN PRESS AGAIN TO AIM`;
     u.band.style.left = (clamp(opt.need || .7, .3, .98) * 100 - 1) + '%'; u.band.style.width = ((1.08 - clamp(opt.need || .7, .3, .98)) / 1.08 * 100) + '%';
     u.fill.style.transform = 'scaleX(0)'; u.needle.style.left = '0%'; u.mlbl.textContent = opt.label || 'KICK';
-    u.touch.hidden = !isTouch(); u.btns.innerHTML = `<button type="button" class="lv-b big" data-b="act">KICK</button>`; u.stick.style.visibility = 'hidden';
+    u.touch.hidden = !isTouch() || padOn(); u.btns.innerHTML = `<button type="button" class="lv-b big" data-b="act">KICK</button>`; u.stick.style.visibility = 'hidden';
     const down = () => { if (ph === 0 && !holding){ holding = true; ph = 1; t0 = performance.now(); } else if (ph === 2){ finish(); } };
     const up = () => { if (ph === 1){ pw = clamp((performance.now() - t0) / 1000 / .9, .05, 1.06); ph = 2; t0 = performance.now(); u.mlbl.textContent = 'AIM'; } holding = false; };
     const kd = e => { if (e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); if (!e.repeat) down(); } };
@@ -1405,19 +1417,19 @@ function kickMeter(opt = {}){
     const pd = e => { const b = e.target.closest('[data-b]'); if (!b) return; e.preventDefault(); down(); };
     const pu = e => { const b = e.target.closest('[data-b]'); if (!b) return; up(); };
     addEventListener('keydown', kd, true); addEventListener('keyup', ku, true); u.btns.addEventListener('pointerdown', pd); u.btns.addEventListener('pointerup', pu);
-    let padWas = false, aimV = 0;
+    let padWas = true, aimV = 0;   // (an A still held from calling the kick has to be let go first)
     function finish(){
-      ph = 3;
+      ph = 3; KICKING = false; H.rumble(.6, .4, 160);
       removeEventListener('keydown', kd, true); removeEventListener('keyup', ku, true); u.btns.removeEventListener('pointerdown', pd); u.btns.removeEventListener('pointerup', pu);
       const a = aimV;
       setTimeout(() => { u.meter.hidden = true; u.meter.classList.remove('kick'); u.prompt.hidden = true; u.touch.hidden = true; u.stick.style.visibility = ''; res({ power:pw, aim:a }); }, 350);
     }
     function loop(now){
-      if (epoch !== H.epoch()){ removeEventListener('keydown', kd, true); removeEventListener('keyup', ku, true); u.meter.hidden = true; u.prompt.hidden = true; u.touch.hidden = true; return; }
+      if (epoch !== H.epoch()){ KICKING = false; removeEventListener('keydown', kd, true); removeEventListener('keyup', ku, true); u.meter.hidden = true; u.prompt.hidden = true; u.touch.hidden = true; return; }
       if (ph === 3) return;
       if (!H.paused()){
         let gp = null; try { gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(g => g && g.connected); } catch(e){}
-        const pb = !!(gp && gp.buttons[0] && gp.buttons[0].pressed); if (pb && !padWas) down(); if (!pb && padWas) up(); padWas = pb;
+        const pb = !!(gp && gp.buttons[0] && gp.buttons[0].pressed); if (pb && !padWas){ H.setPad(true); down(); } if (!pb && padWas) up(); padWas = pb;
         if (ph === 1){ const m = clamp((now - t0) / 1000 / .9, 0, 1.06); u.fill.style.transform = `scaleX(${(m / 1.08).toFixed(3)})`; u.needle.style.left = (m / 1.08 * 100) + '%'; if (m >= 1.06) up(); }
         if (ph === 2){
           // the aim needle sweeps steadily side to side; the middle is dead straight
@@ -1436,6 +1448,6 @@ function kickMeter(opt = {}){
   });
 }
 
-return { play, kickMeter, get busy(){ return !!S; }, get _S(){ return S; } };
+return { play, kickMeter, get busy(){ return !!S; }, get kicking(){ return KICKING; }, get _S(){ return S; } };
 };
 })();

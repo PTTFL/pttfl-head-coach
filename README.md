@@ -12,21 +12,41 @@ Pick one on the Game Plan screen (or switch mid-game from the pause menu).
 - **Player** (default): every snap is played out live, Madden style. All 22 players move in real time: linemen block and get beaten, receivers run their routes against man or zone coverage that comes from the defensive call, the ball flies through the air and is caught, knocked down or picked by whoever gets to it, and runners go until someone tackles them. You play the QB and whoever has the ball on offense, and any defender you like on defense. Your play call still matters: it sets the coverage, the blocking and the matchups.
 - **Head Coach**: call the play and watch it from the sideline.
 
-### Player mode controls
+### Controls
 
-| | Keyboard | Gamepad |
+Plays with a keyboard, a touch screen, or an Xbox controller (any controller the browser sees as a standard gamepad works; buttons are named the Xbox way). Plug the controller in and press any button: the on-screen button icons switch to Xbox buttons, and switch back as soon as you touch the keyboard or mouse.
+
+**On the field (Player mode)**
+
+| | Keyboard | Xbox controller |
 |---|---|---|
 | Snap | Space | A |
-| Throw | 1–5: tap for a lob, hold for a bullet and let go when the needle is in the green | A B X Y RB |
+| Throw | 1–5: tap for a lob, hold for a bullet and let go when the needle is in the green | A B X Y RB (shown on each receiver's name plate) |
 | Lead the throw / move the QB | WASD or arrows (held while throwing) | Left stick |
-| Throw it away | X | LB |
-| Run | WASD or arrows, Shift to sprint | Left stick, RT |
-| Juke left / right | Q / E (best just before contact) | Right stick, or LB / RB |
-| Spin, stiff arm, dive | Space, F, Z | B, Y, X |
-| Defense: switch / tackle / hit stick / play the ball / shed | Tab, Space, E, X, F | A, B, X, Y, RB |
-| Kicks | Hold Space for power, let go, press again to aim | A |
+| Throw it away | X | LB or right stick click |
+| Run | WASD or arrows, Shift to sprint | Left stick, RT to sprint |
+| Juke left / right | Q / E (best just before contact) | LB / RB, or flick the right stick |
+| Stiff arm, spin, dive or slide | F, Space, Z | A, B, X |
+| Defense: switch / dive tackle / hit stick / play the ball / shed | Tab, Space, E, X, F | B, X, LB (or right stick up), Y, A |
+| Kicks | Hold Space for power, let go, press again to aim | Same with A |
 
-On a phone or tablet you get a stick and buttons on screen; tap a receiver to lob it to him. Throws let go before the receiver comes out of his break land **on time** and are more accurate; a man in tight coverage makes any catch harder. Press **H** in a game for the full list.
+**Menus and play calling (Xbox controller)**
+
+| | |
+|---|---|
+| Move the highlight | D-pad or left stick |
+| Select / back | A / B |
+| Coordinator's call | Y |
+| Run plays / pass plays | LB / RB |
+| Flip the play | LT |
+| OC / DC Auto | RT |
+| Timeout | View |
+| Pause (and "press start" on menus) | Menu |
+| Change camera | X |
+| Controls list | Right stick click |
+| At the line: pick a receiver / change his route / make him the primary target / reset | LB RB or D-pad left right / D-pad up down / Y / View |
+
+The controller rumbles on hits, fumbles, picks and touchdowns (turn it off in the pause menu). On a phone or tablet you get a stick and buttons on screen; tap a receiver to lob it to him. Throws let go before the receiver comes out of his break land **on time** and are more accurate; a man in tight coverage makes any catch harder. Press **H** (or click the right stick) in a game for the full list.
 
 ## Head-to-head
 

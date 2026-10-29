@@ -186,6 +186,7 @@ function buildStadium(){
 const POS = new Map();
 /* name plates over the offense's fantasy players: projected from each sprite's screen box every frame */
 let PLF = null, plKey = '', plEls = [], plThr = -1;
+const XBL = ['A', 'B', 'X', 'Y', 'RB'];
 function plateTick(){
   requestAnimationFrame(plateTick);
   const box = ov && ov.querySelector('.plates'); if (!box) return;
@@ -205,7 +206,9 @@ function plateTick(){
   // during your pass play each receiver's plate shows the key that throws it to him
   const tv = THROW.on && G.poss === ME ? THROW.ver : 0;
   if (tv !== plThr){ plThr = tv;
-    for (const [i, el] of plEls){ const n = tv ? THROW.ids.indexOf(i) : -1, t = el.querySelector('.tk'); if (t) t.textContent = n >= 0 ? n + 1 : ''; el.classList.toggle('thr', n >= 0); el._w = 0; }
+    for (const [i, el] of plEls){ const n = tv ? THROW.ids.indexOf(i) : -1, t = el.querySelector('.tk');
+      if (t){ t.textContent = n >= 0 ? (PADMODE ? XBL[n] : n + 1) : ''; t.dataset.x = PADMODE && n >= 0 ? XBL[n] : ''; }
+      el.classList.toggle('thr', n >= 0); el._w = 0; }
   }
   // place each plate over its man; when two would overlap (QB and back stacked), lift the farther one
   const pts = [];
@@ -1373,7 +1376,8 @@ function showTablet(mode, grp){
     + (vis ? '' : rpPicker(rec))
     + (!vis ? '' : `<div class="cards">${vis.map((k, i) => { const P = off ? OFF[k] : DEF[k]; return `<button class="pc${k === rec.k ? ' rec' : ''}" data-k="${k}"><span class="k">${i + 1}</span>${off ? (TREE[k] ? artCustom(k, {}) : artOff(k)) : artDef(k)}<span class="nm">${esc(P.n)}</span><span class="fm">${esc(P.ff)}</span></button>`; }).join('')}</div>`)
     + `<div class="specials">${off && TAB.grp ? `<button class="spb alt" id="grpback">◂ Run / Pass</button>` : ''}${sp}</div>`
-    + (off && TAB.grp !== 'run' ? myPlaysRow() : '');
+    + (off && TAB.grp !== 'run' ? myPlaysRow() : '')
+    + padLegend(off ? 'off' : 'def');
   tablet.querySelectorAll('.pc').forEach(b => b.onclick = () => userCall(b.dataset.k));
   tablet.querySelectorAll('[data-g]').forEach(b => b.onclick = () => pickGroup(b.dataset.g));
   tablet.querySelectorAll('.rpb.oc').forEach(b => b.onclick = () => userCall(b.dataset.k));
@@ -1399,6 +1403,12 @@ function toggleFlip(){
   showTablet('off', TAB.grp); idleFormation('single', 'base');
 }
 function pickGroup(grp){ if (!TAB || TAB.mode !== 'off' || (G && G.busy)) return; showTablet('off', grp); const c = tablet.querySelector('.pc,.rpb'); if (c) c.focus({ preventScroll:true }); }
+function padLegend(kind){
+  const L = kind === 'pre' ? [['A', 'Snap'], ['B', 'Change play'], ['LB RB', 'Pick receiver'], ['▲ ▼', 'Change route'], ['Y', 'Primary target'], ['LT', 'Flip'], ['VIEW', 'Reset routes']]
+    : kind === 'off' ? [['A', 'Call play'], ['B', 'Back'], ['LB', 'Run plays'], ['RB', 'Pass plays'], ['Y', 'OC call'], ['LT', 'Flip'], ['RT', 'OC Auto'], ['VIEW', 'Timeout']]
+    : [['A', 'Call play'], ['Y', 'DC call'], ['RT', 'DC Auto'], ['VIEW', 'Timeout']];
+  return `<div class="xbleg">${L.map(([k, d]) => `<span>${k.split(' ').map(xbBtn).join('')}${d}</span>`).join('')}</div>`;
+}
 function rpPicker(rec){
   const box = (g, n, art, i) => { const ks = TAB.keys.filter(k => OFF[k].k === g), mine = OFF[rec.k].k === g;
     return `<button class="rpb ${g}" data-g="${g}"><span class="k">${i}</span>${art}<b>${n}</b><small>${ks.length} PLAYS</small>${mine ? `<em>OC LIKES ${esc(OFF[rec.k].n)}</em>` : ''}</button>`; };
@@ -1743,6 +1753,7 @@ function renderPresnap(){
   tablet.innerHTML = `<div class="bar"><span class="side">AUDIBLE</span><b>${PRE.name ? esc(PRE.name) + ' · ' : ''}${esc(OFF[PRE.k].n)}</b> · ${downTxt()} · ${spotTxt()} <span class="r">Click a receiver to change his route or make him the ★ primary target</span></div>`
     + `<div class="psbody"><div class="prlist">${els.map(chip).join('')}</div>${opts}</div>`
     + `<div class="specials" style="padding-top:8px"><button class="spb" id="snapb">Snap Ball</button><button class="spb alt" id="psreset">Reset Routes</button><button class="spb alt" id="psback">Change Play</button><button class="spb alt flipb" id="psflip" aria-pressed="${!!G.flip}">⇄ Flip${G.flip ? 'ped' : ''}</button><button class="spb save" id="pssave">${PRE.name ? 'Save Changes' : 'Save Play'}</button></div>`
+    + padLegend('pre')
     + (PRE.saving ? `<div class="saverow"><label for="pname" class="hud">NAME THIS PLAY</label><input id="pname" maxlength="24" autocomplete="off" placeholder="e.g. Jefferson Deep Shot" value="${esc(PRE.name || '')}"><button class="spb" id="psdo">Save to My Plays</button><button class="spb alt" id="pscancel">Cancel</button></div>` : '');
   tablet.querySelectorAll('.prc').forEach(b => b.onclick = () => selectRcv(+b.dataset.i));
   tablet.querySelectorAll('[data-r]').forEach(b => { b.onclick = () => { if (PRE) setRoute(PRE.sel, b.dataset.r); }; b.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); ev.stopPropagation(); if (PRE) setRoute(PRE.sel, b.dataset.r); } }; });
@@ -1803,7 +1814,7 @@ async function runPlay(oK, dK){
   // your pass play: you can throw it to anyone running a route until the QB lets it go (or gets hit)
   if (canThrow(R, ch)){
     THROW.ids = eligibleFor(oK).filter(i => R.routes[i]); THROW.req = null; THROW.on = true; THROW.ver++;
-    if (!G.thrHint){ G.thrHint = true; toast(`PRESS ${THROW.ids.map((_, n) => n + 1).join(' ')} TO THROW TO A RECEIVER`); }
+    if (!G.thrHint){ G.thrHint = true; toast(`PRESS ${THROW.ids.map((_, n) => PADMODE ? XBL[n] : n + 1).join(' ')} TO THROW TO A RECEIVER`); }
     try {
       const a = await animate(ch, { win:{ from:.25 / ch.dur, until:ch.px.kLimit / (ch.px.scale || 1) } });
       THROW.on = false; THROW.ver++;
@@ -2151,8 +2162,8 @@ function renderMenu(){
   if (MENU_VIEW === 'keys'){ box.style.maxWidth = '760px'; $('#pause h2').textContent = 'Controls'; $('#menu').innerHTML = keysPage(); $('#menu').querySelector('[data-m="b"]').onclick = () => { MENU_VIEW = 'menu'; renderMenu(); }; return; }
   if (MENU_VIEW === 'stats' && G){ box.style.maxWidth = '980px'; $('#pause h2').textContent = 'Game Stats'; $('#menu').innerHTML = statsPage(); $('#menu').querySelector('[data-m="b"]').onclick = () => { MENU_VIEW = 'menu'; renderMenu(); }; return; }
   box.style.maxWidth = '420px'; $('#pause h2').textContent = 'Paused';
-  $('#menu').innerHTML = `<button class="chip" data-m="r">Resume</button><button class="chip" data-m="st">Game Stats</button><button class="chip" data-m="ky">Controls</button><button class="chip" data-m="c">Camera: ${esc(CAMS[camIdx].name)}</button><button class="chip" data-m="s">Play Speed: ${SPEED > 1 ? 'Fast' : 'Normal'}</button>${MP ? '' : `<button class="chip" data-m="sty">Play Style: ${SET.style === 'player' ? 'Player' : 'Head Coach'}</button>`}<button class="chip" data-m="q">${MP ? 'Leave Game' : 'Quit to Title'}</button>`;
-  $('#menu').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = b.dataset.m; if (m === 'r') resume(); if (m === 'c'){ cycleCam(); renderMenu(); } if (m === 's'){ SPEED = SPEED > 1 ? 1 : 1.8; store.set('hc-speed', SPEED); renderMenu(); } if (m === 'q'){ if (MP) mpLeaveAsk(); else toTitle(); } if (m === 'st'){ MENU_VIEW = 'stats'; renderMenu(); } if (m === 'ky'){ MENU_VIEW = 'keys'; renderMenu(); } if (m === 'sty'){ SET.style = SET.style === 'player' ? 'coach' : 'player'; store.set('hc-style', SET.style); toast(SET.style === 'player' ? 'PLAYER MODE · FROM THE NEXT SNAP' : 'HEAD COACH MODE · FROM THE NEXT SNAP'); renderMenu(); } });
+  $('#menu').innerHTML = `<button class="chip" data-m="r">Resume</button><button class="chip" data-m="st">Game Stats</button><button class="chip" data-m="ky">Controls</button><button class="chip" data-m="c">Camera: ${esc(CAMS[camIdx].name)}</button><button class="chip" data-m="s">Play Speed: ${SPEED > 1 ? 'Fast' : 'Normal'}</button>${MP ? '' : `<button class="chip" data-m="sty">Play Style: ${SET.style === 'player' ? 'Player' : 'Head Coach'}</button>`}${padGP() ? `<button class="chip" data-m="rum">Controller Vibration: ${RUMBLE ? 'On' : 'Off'}</button>` : ''}<button class="chip" data-m="q">${MP ? 'Leave Game' : 'Quit to Title'}</button>`;
+  $('#menu').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { const m = b.dataset.m; if (m === 'r') resume(); if (m === 'c'){ cycleCam(); renderMenu(); } if (m === 's'){ SPEED = SPEED > 1 ? 1 : 1.8; store.set('hc-speed', SPEED); renderMenu(); } if (m === 'q'){ if (MP) mpLeaveAsk(); else toTitle(); } if (m === 'st'){ MENU_VIEW = 'stats'; renderMenu(); } if (m === 'ky'){ MENU_VIEW = 'keys'; renderMenu(); } if (m === 'rum'){ RUMBLE = !RUMBLE; store.set('hc-rumble', RUMBLE); rumble(.5, .5, 150); renderMenu(); } if (m === 'sty'){ SET.style = SET.style === 'player' ? 'coach' : 'player'; store.set('hc-style', SET.style); toast(SET.style === 'player' ? 'PLAYER MODE · FROM THE NEXT SNAP' : 'HEAD COACH MODE · FROM THE NEXT SNAP'); renderMenu(); } });
 }
 function toTitle(){
   EPOCH++; PAUSED = false; PQ = []; const ab = $('#autobar'); if (ab) ab.hidden = true;
@@ -2357,19 +2368,23 @@ const KEYS_HC0 = [
   ['At the line (audibles)', [['1–5', 'Select a receiver'], ['0–9', 'Pick a route off the tree'], ['T', 'Make him the primary target'], ['M', 'Flip the play'], ['S', 'Save the play'], ['Enter / Space', 'Snap'], ['Esc', 'Change play']]],
   ['Anytime', [['C', 'Change camera'], ['T', 'Timeout'], ['Esc / P', 'Pause (Esc also cancels Auto)'], ['H / ?', 'This list']]]
 ];
-const KEYS_HC = KEYS_HC0;
+const KEYS_XBM = ['Xbox controller · menus and play calling', [['D-pad / LS', 'Move the highlight'], ['A', 'Select'], ['B', 'Back'], ['Y', 'Coordinator call'], ['X', 'Change camera'], ['LB / RB', 'Run plays / pass plays'], ['LT', 'Flip the play'], ['RT', 'OC / DC Auto'], ['View', 'Timeout'], ['Menu', 'Pause'], ['RS click', 'This list']]];
+const KEYS_HC = [...KEYS_HC0, KEYS_XBM, ['Xbox controller · during your pass play', [['A B X Y RB', 'Throw it to that receiver']]]];
 const KEYS = MP ? KEYS_HC : [
   ['Player mode · at the line', [['Space', 'Snap the ball (CPU snaps when you are on defense)'], ['Tab', 'Defense: pick your man before the snap']]],
   ['Player mode · quarterback', [['1–5', 'Throw to that receiver. Tap = lob over the top; hold = bullet, let go when the needle is in the green'], ['WASD / Arrows', 'Move in the pocket or scramble; held while throwing, leads the receiver'], ['Shift', 'Sprint'], ['X', 'Throw it away'], ['Tap a receiver', 'Lob it to him']]],
   ['Player mode · with the ball', [['WASD / Arrows', 'Run'], ['Shift', 'Sprint (tires him out)'], ['Q / E', 'Juke left / right (best just before contact)'], ['Space', 'Spin'], ['F', 'Stiff arm'], ['Z', 'Dive forward / QB slide']]],
   ['Player mode · defense', [['WASD / Arrows', 'Move (the CPU plays your man until you touch it)'], ['Tab / Q', 'Switch to the man nearest the ball'], ['Space', 'Dive tackle'], ['E', 'Hit stick: big hit, can jar it loose'], ['X', 'Play the ball when it is in the air'], ['F', 'Shed a block']]],
   ['Player mode · kicking', [['Hold Space', 'Power: let go at the line in the meter'], ['Space again', 'Aim: stop the needle in the middle']]],
-  ['Player mode · gamepad', [['LS', 'Move'], ['RT', 'Sprint'], ['A B X Y RB', 'Receivers 1–5'], ['B / Y / X', 'Spin / stiff arm / dive'], ['RS or LB RB', 'Juke'], ['A / B / X / Y', 'Defense: switch / tackle / hit stick / play the ball']]],
+  ['Xbox controller · on the field', [['A', 'Snap'], ['A B X Y RB', 'Throw to that receiver (tap = lob, hold = bullet)'], ['LB / RS click', 'Throw it away'], ['RT', 'Sprint'], ['A / B / X', 'With the ball: stiff arm / spin / dive or slide'], ['LB RB / RS', 'Juke'], ['B / X / Y', 'Defense: switch / dive tackle / play the ball'], ['LB / RS up', 'Hit stick'], ['A', 'Defense: shed a block · Kicks: hold for power, again to aim']]],
+  KEYS_XBM,
+  ['Xbox controller · at the line', [['LB RB / D-pad ◂ ▸', 'Pick a receiver'], ['D-pad ▲ ▼', 'Change his route'], ['Y', 'Make him the primary target'], ['LT', 'Flip the play'], ['View', 'Reset routes'], ['A', 'Snap'], ['B', 'Change play']]],
   ...KEYS_HC0
 ];
 
 function keysPage(){
-  return `<div class="statpg"><div class="keys">${KEYS.map(([h, rows]) => `<div class="kgrp"><span class="hud">${h}</span>${rows.map(([k, d]) => `<div class="krow"><span>${k.split(' / ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</span><em>${esc(d)}</em></div>`).join('')}</div>`).join('')}</div><button class="chip" data-m="b">◂ Back</button></div>`;
+  const list = PADMODE ? [...KEYS.filter(k => /^Xbox/.test(k[0])), ...KEYS.filter(k => !/^Xbox/.test(k[0]))] : KEYS;
+  return `<div class="statpg"><div class="keys">${list.map(([h, rows]) => `<div class="kgrp"><span class="hud">${h}</span>${rows.map(([k, d]) => `<div class="krow"><span>${k.split(' / ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</span><em>${esc(d)}</em></div>`).join('')}</div>`).join('')}</div><button class="chip" data-m="b">◂ Back</button></div>`;
 }
 function statsPage(){
   return `<div class="statpg"><div class="sp-score"><span class="u">${esc(AB(G.U))} <b class="lcd">${G.sc.u}</b></span><span class="q">${G.q > 4 ? 'OT' : ord(G.q) + ' QTR'} · ${mmss(G.clock)}</span><span class="t"><b class="lcd">${G.sc.t}</b> ${esc(AB(G.T))}</span></div>`
@@ -3167,9 +3182,181 @@ addEventListener('resize', () => { camSnap = true; });
 const LIVE = window.HC_LIVE ? window.HC_LIVE({
   get G(){ return G; }, get ME(){ return ME; }, TM, ytg, wdir, fieldX, forms, skillPlayers, playTree, routeKeysFor, defDepth, unitR, defR,
   clamp, lerp, rnd, gauss, put, EL, camGame, cam, ov, THROW, esc, last, pauseGame,
-  epoch:() => EPOCH, paused:() => PAUSED, eligible:k => eligibleFor(k), posName:i => POSN[i] || 'OL'
+  epoch:() => EPOCH, paused:() => PAUSED, eligible:k => eligibleFor(k), posName:i => POSN[i] || 'OL',
+  padMode:() => PADMODE, setPad:on => setPadMode(on), rumble:(a, b, ms) => rumble(a, b, ms), xbBtn:k => xbBtn(k)
 }) : null;
-window.__hcLive = { get LIVE(){ return LIVE; }, get G(){ return G; }, OFF, DEF, modOf, keyed, callEdge, edgeOf, pickRB, repOf, TM, opp, get SET(){ return SET; }, newGame:L => newGame(L), set G(v){ G = v; }, ytg, test:{ doKick:k => doKick(k), doPunt:() => doPunt() } };
+
+/* ---------------- Xbox controller ----------------
+   Standard gamepad mapping, Madden layout. Menus and play calling: D-pad or left stick moves the highlight, A picks,
+   B goes back, Y is the coordinator's call, X changes the camera, View calls a timeout, Menu pauses (and on the menus
+   before kickoff, moves on). On the play-call tablet LB / RB jump to run / pass plays, LT flips the play, RT turns
+   OC / DC Auto on or off. At the line (audibles): LB / RB pick a receiver, up / down change his route, Y makes him the
+   primary target, View resets the routes, A snaps. During a live snap in Player mode hc-live.js reads the controller. */
+const XB = { A:0, B:1, X:2, Y:3, LB:4, RB:5, LT:6, RT:7, VIEW:8, MENU:9, LS:10, RS:11 };
+const XBC = { A:'#5DD35D', B:'#FF4F5E', X:'#4FA3FF', Y:'#FFD23F' };
+const xbBtn = k => XBC[k] ? `<i class="xbk f" style="--c:${XBC[k]}">${k}</i>` : `<i class="xbk">${k}</i>`;
+let PADMODE = false, PADF = null, PADR = null, PADSIG = '', padScope = null, padPrev = [], padRep = {}, padUp = 0, RUMBLE = store.get('hc-rumble', true);
+function setPadMode(on){
+  if (on === PADMODE) return;
+  PADMODE = on; document.body.classList.toggle('xb', on); plThr = -1;
+  if (!on) padBlur();
+}
+const padGP = () => { try { for (const p of navigator.getGamepads ? navigator.getGamepads() : []) if (p && p.connected) return p; } catch(e){} return null; };
+function rumble(strong, weak, ms){
+  if (!RUMBLE || !PADMODE) return;
+  const g = padGP(), v = g && g.vibrationActuator;
+  try { if (v && v.playEffect) v.playEffect('dual-rumble', { duration:ms, strongMagnitude:strong, weakMagnitude:weak }).catch(() => {}); } catch(e){}
+}
+// the highlight: whatever the controller is pointing at on the current screen
+// what a button is, so the highlight can find it again after the screen redraws (its id or data, else its words)
+const padSig = el => { const d = JSON.stringify({ ...el.dataset }); return el.tagName + '#' + el.id + d + (el.id || d !== '{}' ? '' : '|' + el.textContent.trim().slice(0, 40)); };
+function padBlur(){ if (PADF) PADF.classList.remove('padf'); PADF = null; }
+function padFocus(el, moved){
+  padBlur(); if (!el) return;
+  PADF = el; el.classList.add('padf'); PADR = el.getBoundingClientRect(); PADSIG = padSig(el);
+  try { el.scrollIntoView({ block:'nearest', inline:'nearest' }); } catch(e){}
+  // the franchise lists pick as you move through them, like a console menu
+  if (moved && el.matches('.trow') && el.getAttribute('aria-pressed') !== 'true') el.click();
+}
+function padScopeEl(){
+  const no = $('#netov'); if (no && !no.hidden) return no;
+  if (!$('#coin').hidden) return $('#coin');
+  if (SCR === 'pause') return $('#menu');
+  if (SCR === 'game') return !PRE && TAB && !tablet.classList.contains('off') && !(G && G.busy) ? tablet : null;
+  return $('#' + SCR);
+}
+function padCands(sc){
+  return [...sc.querySelectorAll('button, a[href], input:not([readonly])')]
+    .filter(el => !el.disabled && !el.closest('.padbar, #camb, #autobar') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+}
+const PAD_DEF = ['#kick', '.trow[aria-pressed="true"]', '.pc.rec', '.rpb.oc', '#press', '[data-c]', '.chip[data-m]', '#rm-go', '.pc', '.chip', 'button'];
+function padDefault(C){ for (const q of PAD_DEF){ const el = C.find(x => x.matches(q)); if (el) return el; } return C[0]; }
+// keep the highlight on something real as screens change underneath it
+let padGone = 0;
+function padUpkeep(){
+  const sc = padScopeEl(), now = performance.now();
+  // a panel that only blinks out while it redraws (the tablet slides away and back) keeps its highlight
+  if (!sc){ padBlur(); if (!padGone) padGone = now; return; }
+  if (sc !== padScope || (padGone && now - padGone > 700)){ padScope = sc; padBlur(); PADR = null; PADSIG = ''; }
+  padGone = 0;
+  if (PADF && PADF.isConnected && sc.contains(PADF) && !PADF.disabled) return;
+  const C = padCands(sc); if (!C.length){ padBlur(); return; }
+  let el = PADSIG && C.find(x => padSig(x) === PADSIG);
+  if (!el && PADSIG.startsWith('BUTTON#{"id"')) el = C.find(x => x.matches('.trow[aria-pressed="true"]'));
+  // a button that redrew in place with new words (Flip → Flipped) is still the same button
+  if (!el && PADR){ const cx = PADR.left + PADR.width / 2, cy = PADR.top + PADR.height / 2;
+    el = C.find(x => { const q = x.getBoundingClientRect(); return Math.hypot(q.left + q.width / 2 - cx, q.top + q.height / 2 - cy) < 24; }); }
+  padFocus(el || padDefault(C), false);
+}
+function padMove(dx, dy){
+  const sc = padScopeEl(); if (!sc) return;
+  const C = padCands(sc); if (!C.length) return;
+  if (!PADF || !PADF.isConnected || !C.includes(PADF)){ padFocus(padDefault(C), false); return; }
+  // the nearest thing that way: edge-to-edge distance in that direction, plus how far off to the side it sits
+  const r = PADF.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let best = null, bs = 1e9;
+  for (const el of C){
+    if (el === PADF) continue;
+    const q = el.getBoundingClientRect(), x = q.left + q.width / 2, y = q.top + q.height / 2;
+    if ((x - cx) * dx + (y - cy) * dy <= 6) continue;
+    const along = Math.max(0, dy ? (dy > 0 ? q.top - r.bottom : r.top - q.bottom) : (dx > 0 ? q.left - r.right : r.left - q.right));
+    const across = dy ? Math.max(0, q.left - r.right, r.left - q.right) : Math.max(0, q.top - r.bottom, r.top - q.bottom);
+    const sc2 = along + across + Math.hypot(x - cx, y - cy) * .02; if (sc2 < bs){ bs = sc2; best = el; }
+  }
+  if (best) padFocus(best, true);
+}
+function padBar(g){ const it = PADK.find(x => x.g === g); if (it && !it.dis){ it.fn(); return true; } return false; }
+function padA(){
+  const sc = padScopeEl();
+  if (sc && PADF && PADF.isConnected && sc.contains(PADF)){
+    if (PADF.matches('.trow')) return padBar('x');          // the list already picked him; A moves on
+    if (PADF.tagName === 'INPUT'){ PADF.focus(); return; }
+    PADF.click(); return;
+  }
+  padBar('x');
+}
+// at the line: change routes without touching the keyboard
+function padPresnap(hit, fire){
+  const els = eligibleFor(PRE.k);
+  const pick = d => { const i = PRE.sel == null ? (d > 0 ? -1 : 0) : els.indexOf(PRE.sel); const n = els[(i + d + els.length) % els.length]; if (n !== PRE.sel) selectRcv(n); };
+  const route = d => {
+    if (PRE.sel == null){ selectRcv(els[0]); return; }
+    const pos = PRE.sel === 7 ? 'RB' : PRE.sel === 5 ? 'TE' : 'WR';
+    const list = (pos === 'RB' ? TREE_RB : TREE_WR).map(x => x[0]).concat(pos === 'RB' ? ['block'] : pos === 'TE' ? ['seam', 'block'] : ['seam']);
+    const cur = curTree()[PRE.sel] || 'block', i = list.indexOf(cur);
+    setRoute(PRE.sel, list[(i + d + list.length) % list.length]);
+  };
+  if (hit(XB.A)) return snapPresnap();
+  if (hit(XB.B)){ leavePresnap(); G.hot = null; showTablet('off', 'pass'); return; }
+  if (hit(XB.LB) || fire.left) return pick(-1);
+  if (hit(XB.RB) || fire.right) return pick(1);
+  if (fire.up) return route(-1);
+  if (fire.down) return route(1);
+  if (hit(XB.Y) && PRE.sel != null) return setPrimary(PRE.sel);
+  if (hit(XB.LT)) return toggleFlip();
+  if (hit(XB.VIEW)){ const b = $('#psreset'); if (b) b.click(); return; }
+  if (hit(XB.X)) cycleCam();
+}
+function padPoll(){
+  requestAnimationFrame(padPoll);
+  const g = padGP(); if (!g){ padPrev = []; return; }
+  const now = performance.now();
+  const B = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > .5));
+  const cur = g.buttons.map((_, i) => B(i)), prev = padPrev; padPrev = cur;
+  const hit = i => cur[i] && !prev[i];
+  const lx = g.axes[0] || 0, ly = g.axes[1] || 0;
+  const dirs = { up:B(12) || ly < -.55, down:B(13) || ly > .55, left:B(14) || lx < -.55, right:B(15) || lx > .55 };
+  if (cur.some(Boolean) || dirs.up || dirs.down || dirs.left || dirs.right) setPadMode(true);
+  // held directions repeat, like holding the D-pad on a console menu
+  const fire = {};
+  for (const d in dirs){ if (dirs[d]){ if (!padRep[d]){ padRep[d] = now + 380; fire[d] = true; } else if (now >= padRep[d]){ padRep[d] = now + 115; fire[d] = true; } } else padRep[d] = 0; }
+  if (PADMODE && now - padUp > 120){ padUp = now; padUpkeep(); }
+  const no = $('#netov'), dlg = no && !no.hidden;
+  // Menu: pause / resume in a game, "press start" everywhere else
+  if (hit(XB.MENU) && !dlg){
+    if (SCR === 'game') pauseGame(); else if (SCR === 'pause') resume(); else padBar('x');
+    return;
+  }
+  // a live snap or the kick meter reads the controller itself
+  if (LIVE && (LIVE.busy || LIVE.kicking) && !PAUSED) return;
+  const nav = () => { if (fire.up) padMove(0, -1); if (fire.down) padMove(0, 1); if (fire.left) padMove(-1, 0); if (fire.right) padMove(1, 0); };
+  if (dlg || !$('#coin').hidden){ nav(); if (hit(XB.A)) padA(); return; }
+  // Head Coach mode: throw to a receiver during your pass play (same buttons as Player mode)
+  if (SCR === 'game' && THROW.on){ [XB.A, XB.B, XB.X, XB.Y, XB.RB].forEach((b, n) => { if (hit(b)) throwKey(n + 1); }); return; }
+  if (SCR === 'game' && PRE && !(G && G.busy)) return padPresnap(hit, fire);
+  if (SCR === 'game'){
+    nav();
+    const ready = TAB && G && !G.busy, off = ready && TAB.mode === 'off';
+    if (hit(XB.A)) padA();
+    if (hit(XB.B)){ if (TAB && TAB.grp && !(G && G.auto)) pickGroup(null); else padBar('o'); }
+    if (hit(XB.Y)) padBar('t');
+    if (hit(XB.X)) padBar('s');
+    if (hit(XB.VIEW)) padBar('sel');
+    if (hit(XB.LB) && off) pickGroup('run');
+    if (hit(XB.RB) && off) pickGroup('pass');
+    if (hit(XB.LT) && off) toggleFlip();
+    if (hit(XB.RT) && ready && (TAB.mode === 'off' || TAB.mode === 'def')){ if (G.auto) cancelAuto(); else startAuto(TAB.mode); }
+    if (hit(XB.RS)){ pauseGame(); MENU_VIEW = 'keys'; renderMenu(); }
+    return;
+  }
+  if (SCR === 'pause'){
+    nav();
+    if (hit(XB.A)) padA();
+    if (hit(XB.B)){ if (MENU_VIEW !== 'menu'){ MENU_VIEW = 'menu'; renderMenu(); } else resume(); }
+    return;
+  }
+  nav();
+  if (hit(XB.A)) padA();
+  if (hit(XB.B)) padBar('o');
+  if (hit(XB.Y)) padBar('t');
+  if (hit(XB.X)) padBar('s');
+}
+requestAnimationFrame(padPoll);
+addEventListener('gamepadconnected', () => { setPadMode(true); toast('CONTROLLER CONNECTED', 'g'); });
+// the keyboard or a mouse / finger takes over again the moment you use it
+addEventListener('keydown', () => setPadMode(false), true);
+addEventListener('pointerdown', e => { if (e.isTrusted) setPadMode(false); }, true);
+window.__hcLive = { get LIVE(){ return LIVE; }, get G(){ return G; }, OFF, DEF, modOf, keyed, callEdge, edgeOf, pickRB, repOf, TM, opp, get SET(){ return SET; }, newGame:L => newGame(L), set G(v){ G = v; }, ytg, test:{ doKick:k => doKick(k), doPunt:() => doPunt(), nextSnap:() => nextSnap() } };
 
 /* ---------------- boot ---------------- */
 buildStadium();

@@ -670,3 +670,28 @@ table.stats{border-collapse:separate;border-spacing:0;width:100%;font-variant-nu
 .lvx.tgt i{left:-12px;top:-12px;width:24px;height:24px;border:2px dashed #fff;box-shadow:0 0 8px rgba(255,255,255,.7);animation:lvspin 1s linear infinite}
 @keyframes lvspin{to{transform:rotate(360deg)}}
 @media (max-width:640px){.lv-prompt{font-size:.5rem;bottom:calc(196px + var(--safe-b,0px))}.lv-meter{bottom:calc(210px + var(--safe-b,0px))}}
+
+/* ---------------- Xbox controller ---------------- */
+.padf{outline:3px solid #FFE600!important;outline-offset:2px;box-shadow:0 0 0 6px rgba(255,230,0,.22),0 0 22px rgba(255,230,0,.5)!important;position:relative;z-index:2}
+/* the controller-bar glyphs turn into Xbox buttons: ✕ → A, ○ → B, △ → Y, □ → X, select → View, START → Menu */
+body.xb .ps{position:relative;color:transparent!important}
+body.xb .ps::after{position:absolute;inset:0;display:grid;place-items:center;font-family:Arial,sans-serif;font-weight:900}
+body.xb .ps.x::after{content:"A";color:#5DD35D}
+body.xb .ps.o::after{content:"B";color:#FF4F5E}
+body.xb .ps.t::after{content:"Y";color:#FFD23F}
+body.xb .ps.s::after{content:"X";color:#4FA3FF}
+body.xb .sel{position:relative;width:22px;height:22px;border-radius:50%;transform:none;background:radial-gradient(circle at 35% 30%,#4A4560,#1A1828)}
+body.xb .sel::after{content:"⧉";position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:#E8E4FF}
+body.xb .shoulder{font-size:0;padding:3px 9px}
+body.xb .shoulder::after{content:"☰";font-size:.85rem;line-height:1}
+body.xb .pc .k,body.xb .rpb .k{visibility:hidden}
+/* button chips used in legends and hints */
+.xbk{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-right:3px;padding:0 4px;border-radius:9px;box-sizing:border-box;font-family:Arial,sans-serif;font-style:normal;font-weight:900;font-size:.62rem;line-height:1;color:#E8E4FF;background:linear-gradient(180deg,#5B5677,#2C2942);border:1px solid #05040E;vertical-align:-3px;letter-spacing:0}
+.xbk.f{width:18px;padding:0;border-radius:50%;color:var(--c);background:radial-gradient(circle at 35% 30%,#4A4560,#14121F)}
+.xbk+.xbk{margin-left:-1px}
+.xbleg{display:none}
+body.xb .xbleg{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:center;padding:6px 10px 8px;border-top:1px solid rgba(255,255,255,.08);font-family:var(--f-head);font-style:italic;font-weight:700;font-size:.8rem;color:#C9C3EE}
+.xbleg span{white-space:nowrap}
+.npl .tk[data-x="A"]{background:#5DD35D}.npl .tk[data-x="B"]{background:#FF4F5E;color:#fff}.npl .tk[data-x="X"]{background:#4FA3FF}.npl .tk[data-x="Y"]{background:#FFD23F}.npl .tk[data-x="RB"]{background:#E8E4FF}
+.npl .tk[data-x="A"],.npl .tk[data-x="B"],.npl .tk[data-x="X"],.npl .tk[data-x="Y"]{border-radius:50%;min-width:13px}
+.lv-prompt .xbk{vertical-align:-4px}
