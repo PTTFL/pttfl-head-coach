@@ -21,8 +21,9 @@ Plays with a keyboard, a touch screen, or an Xbox controller (any controller the
 | | Keyboard | Xbox controller |
 |---|---|---|
 | Snap | Space | A |
-| Throw | 1–5: tap for a lob, hold for a bullet and let go when the needle is in the green | A B X Y RB (shown on each receiver's name plate) |
-| Lead the throw / move the QB | WASD or arrows (held while throwing) | Left stick |
+| Quick throw | Tap 1–5: a lob to that receiver, out right away | Tap A B X Y RB (shown on each receiver's name plate) |
+| Aimed throw | Hold 1–5: a circle shows where the ball will land; WASD moves it to lead him. Hold longer for a harder throw (lob, touch, bullet). Let go to throw | Hold A B X Y RB, aim with the left stick |
+| Move the QB | WASD or arrows | Left stick |
 | Throw it away | X | LB or right stick click |
 | Run | WASD or arrows, Shift to sprint | Left stick, RT to sprint |
 | Juke left / right | Q / E (best just before contact) | LB / RB, or flick the right stick |
@@ -46,7 +47,7 @@ Plays with a keyboard, a touch screen, or an Xbox controller (any controller the
 | Controls list | Right stick click |
 | At the line: pick a receiver / change his route / make him the primary target / reset | LB RB or D-pad left right / D-pad up down / Y / View |
 
-The controller rumbles on hits, fumbles, picks and touchdowns (turn it off in the pause menu). On a phone or tablet you get a stick and buttons on screen; tap a receiver to lob it to him. Throws let go before the receiver comes out of his break land **on time** and are more accurate; a man in tight coverage makes any catch harder. Press **H** (or click the right stick) in a game for the full list.
+The controller rumbles on hits, fumbles, picks and touchdowns (turn it off in the pause menu). On a phone or tablet you get a stick and buttons on screen; tap a receiver to lob it to him. Throws let go before the receiver comes out of his break land **on time** and are more accurate; a man in tight coverage makes any catch harder. The size of the circle shows how accurate the throw will be: it grows on long throws, under pressure and on the run. If you get hit while winding up, the QB usually still gets a hurried throw off. Press **H** (or click the right stick) in a game for the full list.
 
 ## Head-to-head
 

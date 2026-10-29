@@ -36,8 +36,8 @@ function ui(){
   UI = { box, prompt:box.querySelector('.lv-prompt'), call:box.querySelector('.lv-call'), meter:box.querySelector('.lv-meter'),
     band:box.querySelector('.lv-band'), fill:box.querySelector('.lv-fill'), needle:box.querySelector('.lv-needle'), mlbl:box.querySelector('.lv-mlbl'),
     hint:box.querySelector('.lv-hint'), touch, stick:touch.querySelector('.lv-stick'), knob:touch.querySelector('.lv-stick i'), btns:touch.querySelector('.lv-btns'),
-    ring:mk('ring'), tgt:mk('tgt') };
-  UI.ring.style.display = UI.tgt.style.display = 'none';
+    ring:mk('ring'), tgt:mk('tgt'), aim:mk('aim') };
+  UI.ring.style.display = UI.tgt.style.display = UI.aim.style.display = 'none';
   setupTouch();
   return UI;
 }
@@ -132,14 +132,14 @@ const TBTN = {
 };
 const HINT = {
   pre:[['Space', 'Snap'], ['C', 'Camera']],
-  qb:[['1–5', 'Throw: tap = lob, hold = bullet (let go in the green)'], ['WASD', 'Move · aim while throwing'], ['Shift', 'Sprint'], ['X', 'Throw it away']],
+  qb:[['1–5', 'Throw: tap = quick lob · hold = aim the circle with WASD, longer = harder'], ['WASD', 'Move'], ['Shift', 'Sprint'], ['X', 'Throw it away']],
   car:[['WASD', 'Run'], ['Shift', 'Sprint'], ['Q / E', 'Juke'], ['Space', 'Spin'], ['F', 'Stiff arm'], ['Z', 'Dive / slide']],
   def:[['WASD', 'Move'], ['Shift', 'Sprint'], ['Tab', 'Switch'], ['Space', 'Tackle'], ['E', 'Hit stick'], ['X', 'Play the ball'], ['F', 'Shed block']],
   none:[]
 };
 const PADH = {
   pre:[['A', 'Snap'], ['X', 'Camera']],
-  qb:[['A B X Y RB', 'Throw to him · tap = lob, hold = bullet (let go in the green)'], ['LS', 'Move · lead the throw'], ['RT', 'Sprint'], ['LB', 'Throw it away']],
+  qb:[['A B X Y RB', 'Throw: tap = quick lob · hold = aim the circle with LS, longer = harder'], ['LS', 'Move'], ['RT', 'Sprint'], ['LB', 'Throw it away']],
   car:[['LS', 'Run'], ['RT', 'Sprint'], ['LB RB', 'Juke (or flick RS)'], ['B', 'Spin'], ['A', 'Stiff arm'], ['X', 'Dive / slide']],
   def:[['LS', 'Move'], ['RT', 'Sprint'], ['B', 'Switch'], ['X', 'Dive tackle'], ['LB', 'Hit stick (or RS up)'], ['Y', 'Play the ball'], ['A', 'Shed block']],
   none:[]
@@ -407,7 +407,7 @@ function engage(b, x){
     const lb = x.pos === 'LB';
     const pd = S.plan === 'agg' ? .9 : S.plan === 'bend' ? 1.06 : 1;
     const rp = S.R.keyed || 0;
-    let t = (lb ? 5.2 : 4.4) * Math.exp(S.edge * .2) * logn(.48) * pd * (1 - rp * .06) * S.shedMul;
+    let t = (lb ? 6.4 : 5.6) * Math.exp(S.edge * .2) * logn(.4) * pd * (1 - rp * .06) * S.shedMul;
     if (b.pos !== 'OL') t *= b.pos === 'RB' ? .55 : .75;
     if (x.dbl) t *= 1.5;
     x.shedAt = S.t + Math.max(.35, t - .45);
@@ -696,7 +696,8 @@ function qbAI(p){
   }
   if (S.ctl === p && S.userMoved) return;   // the user has him
   if (p.pi < (p.path || []).length){
-    const w = p.path[p.pi]; seek(p, w, p.pi === 0 && S.R.fm === 'gun' ? .5 : .78, p.pi < p.path.length - 1);
+    // a quick drop: shotgun takes a step or two, under center gets back fast
+    const w = p.path[p.pi]; seek(p, w, p.pi === 0 && S.R.fm === 'gun' ? .7 : .95, p.pi < p.path.length - 1);
     if (dist(p.p, w) < 5) p.pi++;
     if (!S.run && p.fake && p.pi === 1 && !p.faked){ p.faked = true; }
     return;
@@ -706,7 +707,7 @@ function qbAI(p){
   const r = S.rushers.filter(x => !x.eng && x.down <= 0).sort((a, b) => dist(a.p, p.p) - dist(b.p, p.p))[0];
   if (r && dist(r.p, p.p) < 40){ const n = nrm(p.p[0] - r.p[0], p.p[1] - r.p[1]); seek(p, [p.p[0] + n[0] * 10 + 6, clamp(p.p[1] + n[1] * 20, -80, 80)], .6); }
   else seek(p, [Math.min(p.p[0] + 4, -30), p.p[1]], .2);
-  if (S.userSide !== 'o') cpuRead(p);
+  if (S.userSide !== 'o' && !S.noThrow) cpuRead(p);
 }
 // where a receiver will be `tau` seconds from now if he keeps running his route
 function future(r, tau){
@@ -786,9 +787,9 @@ function cpuThrow(p, r, lob){
   if (S.dbg) S.dbg.push(`THROW t=${S.t.toFixed(2)} to o${r.i} ${r.route.type} idx=${r.route.idx}/${r.route.pts.length} at ${r.p.map(Math.round)} vel ${r.vel.map(Math.round)} L=${L.map(Math.round)} tau=${tau.toFixed(2)} pts=${JSON.stringify(r.route.pts.map(q=>q.map(Math.round)))}`);
   releaseBall(p, r, to, speed, lob, 'GOOD');
 }
-function releaseBall(p, r, to, speed, lob, grade){
+function releaseBall(p, r, to, speed, lob, grade, pw){
   const D = dist(p.p, to);
-  const peak = lob ? 30 + D * .2 : 7 + D * .055;
+  const peak = pw != null ? lerp(30 + D * .2, 7 + D * .055, clamp(pw, 0, 1)) : lob ? 30 + D * .2 : 7 + D * .055;
   throwBall(p, to, speed, peak, 'pass', r, { lob, grade });
   S.thrown = true; S.airU = to[0]; S.target = r; S.thrT = S.t;
   // the defense sees it come out and breaks on it
@@ -1030,6 +1031,12 @@ function tackleTry(q, c, kind){
   const me = moveEff(c, q); p *= 1 - me;
   if (c === S.QB && !S.run && !S.thrown && !S.scramble) p += .1;   // a QB in the pocket goes down easy
   p = clamp(p, .04, .97);
+  if (c === S.QB && S.hold && !S.thrown && !S.run && !S.scramble && S.userSide === 'o' && S.t - S.hold.t0 > .06 && rnd() < p){
+    // he was already throwing: the ball gets out as he goes down (most of the time)
+    q.tried = S.t;
+    if (rnd() < .75){ const h0 = S.hold; S.hold = null; ui().meter.hidden = true; userThrow(c, h0.r, { pw:Math.max(.2, powerOf(S.t - h0.t0)), off:h0.off, hurried:true }); c.down = .8; q.down = .7; H.rumble(.6, .3, 160); return true; }
+    p = 1;
+  }
   if (S.caught && S.fa == null) S.fa = (c.p[0] - S.caught.u) / 10;
   if (S.caught && kind !== 'arm' && p > 0) S.missYds = S.missYds || 0;
   S.tA = (S.tA || 0) + 1; S.tP = (S.tP || 0) + p; (S.tK = S.tK || {})[kind] = ((S.tK || {})[kind] || 0) + 1;
@@ -1110,7 +1117,9 @@ function userTick(){
     const spr = IN.held.has('spr') || (IN.tstick && hyp(IN.tstick[0], IN.tstick[1]) > .92) || ctx === 'def';
     c.sprint = spr;
     const sp = topSpeed(c) * (spr ? 1 : .86) * st[2];
-    if (!(c.move && S.t - c.move.t0 < .22)) c.want = [st[0] * sp, st[1] * sp];
+    const aiming = ctx === 'qb' && S.hold && S.t - S.hold.t0 >= TAP;
+    if (aiming) c.want = [c.vel[0] * .5, c.vel[1] * .5];
+    else if (!(c.move && S.t - c.move.t0 < .22)) c.want = [st[0] * sp, st[1] * sp];
   }
   if (ctx === 'qb') qbInput(c, st);
   else if (ctx === 'car'){
@@ -1135,57 +1144,56 @@ function userTick(){
     if (IN.hit.has('f') && c.eng){ if (S.t > (c.shedTry || 0)){ c.shedTry = S.t + .9; if (rnd() < .38 + (c.str - .5) * .5){ unlock(c, true); callout('SHED!', 'g'); } } }
   }
 }
+/* Throwing: tap a receiver's button for a quick lob to where he's headed. Hold it to aim: a circle appears where the
+   ball will come down and the stick moves it (lead him upfield, to the sideline, back shoulder) while a short power bar
+   fills from touch to bullet. Let go to throw. A QB hit while he's winding up usually still gets it off, hurried. */
+const AIM_MAX = 120, AIM_SPD = 190, TAP = .14;
+const powerOf = hd => clamp((hd - TAP) / .38, 0, 1);
+const speedOf = (pw, q) => lerp(235, 350, pw) + (q.qa - .6) * 40;
+function aimSpot(q, r, pw, off){
+  const sp = speedOf(pw, q);
+  let tau = .3; for (let k = 0; k < 4; k++){ const f = future(r, tau); tau = .06 + dist(q.p, [f[0] + off[0], f[1] + off[1]]) / sp; }
+  const f = future(r, tau);
+  return { L:[f[0] + off[0], clamp(f[1] + off[1], -262, 262)], tau, sp };
+}
+function throwSd(q, D, mul){
+  const pr = pressure(), moving = hyp(q.vel[0], q.vel[1]) > 35;
+  return (2.5 + (1 - q.qa) * 10) * mul * (1 + D / 450) * (pr < 15 ? 2 : pr < 30 ? 1.4 : 1) * (moving ? 1.3 : 1);
+}
 function qbInput(q, st){
   // a tap on a receiver (mouse or touch) throws him a lob
-  if (H.THROW.req != null){ const j = H.THROW.req; H.THROW.req = null; const r = S.O[j]; if (r && r.role === 'route') return userThrow(q, r, 'LOB', st); }
-  if (IN.hit.has('x')){ throwAway(q); callout('THROWN AWAY'); return; }
+  if (H.THROW.req != null){ const j = H.THROW.req; H.THROW.req = null; const r = S.O[j]; if (r && r.role === 'route') return userThrow(q, r, { pw:.15, off:[0, 0], tap:true }); }
+  if (IN.hit.has('x')){ S.hold = null; throwAway(q); callout('THROWN AWAY'); return; }
   if (!S.hold){
-    for (let n = 1; n <= 5; n++) if (IN.hit.has('t' + n)){ const r = S.O[S.ids[n - 1]]; if (r && r.role === 'route'){ S.hold = { n, r, t0:S.t }; } break; }
+    for (let n = 1; n <= 5; n++) if (IN.hit.has('t' + n)){ const r = S.O[S.ids[n - 1]]; if (r && r.role === 'route'){ S.hold = { n, r, t0:S.t, off:[0, 0] }; } break; }
   }
-  if (S.hold){
-    const hd = S.t - S.hold.t0;
-    if (IN.up.has('t' + S.hold.n) || !IN.held.has('t' + S.hold.n)){
-      const r = S.hold.r, pw = meterVal(hd);
-      S.hold = null; ui().meter.hidden = true;
-      if (hd < .14) return userThrow(q, r, 'LOB', st);
-      return userThrow(q, r, 'BULLET', st, pw);
-    }
+  if (!S.hold) return;
+  const H0 = S.hold, hd = S.t - H0.t0;
+  if (H0.r.role !== 'route'){ S.hold = null; return; }
+  // aiming: the stick moves the circle, not the QB
+  if (hd >= TAP && st[2] > 0){
+    H0.off[0] += st[0] * AIM_SPD * DT; H0.off[1] += st[1] * AIM_SPD * DT;
+    const m = hyp(H0.off[0], H0.off[1]); if (m > AIM_MAX){ H0.off[0] *= AIM_MAX / m; H0.off[1] *= AIM_MAX / m; }
+  }
+  if (IN.up.has('t' + H0.n) || !IN.held.has('t' + H0.n)){
+    S.hold = null; ui().meter.hidden = true;
+    if (hd < TAP) return userThrow(q, H0.r, { pw:.15, off:st[2] > 0 ? [st[0] * 24, st[1] * 24] : [0, 0], tap:true });
+    return userThrow(q, H0.r, { pw:powerOf(hd), off:H0.off });
   }
 }
-const meterVal = hd => clamp((hd - .14) / .8, 0, 1.08);
-function idealOf(q, r){
-  const speed = 300 + (q.qa - .6) * 60;
-  let tau = .3; for (let k = 0; k < 4; k++){ const f = future(r, tau); tau = .06 + dist(q.p, f) / speed; }
-  const L = future(r, tau), D = dist(q.p, L);
-  const pr = pressure();
-  return { c:clamp(.42 + D / 560 * .5, .42, .93), hw:clamp(.045 + q.qa * .055 - (pr < 25 ? .02 : 0), .03, .11), L, tau, speed, D };
-}
-function userThrow(q, r, type, st, pw){
-  const id = idealOf(q, r);
-  const lob = type === 'LOB';
-  const speed = lob ? 205 + (q.qa - .6) * 30 : id.speed;
-  let tau = .3; for (let k = 0; k < 4; k++){ const f = future(r, tau); tau = .06 + dist(q.p, f) / speed; }
-  let L = future(r, tau);
-  let grade = lob ? 'LOB' : 'GOOD', errMul = lob ? 1 : .85, distF = 1;
-  if (!lob){
-    const diff = pw - id.c;
-    if (Math.abs(diff) <= id.hw){ grade = 'PERFECT'; errMul = .3; }
-    else if (Math.abs(diff) <= id.hw * 2.3){ grade = 'GOOD'; errMul = .75; distF = 1 + diff * .45; }
-    else if (diff < 0){ grade = 'SHORT'; errMul = 1.25; distF = 1 + diff * 1.05; }
-    else { grade = 'OVERTHROWN'; errMul = 1.25; distF = 1 + diff * .95; }
-  }
+function userThrow(q, r, o){
+  const pw = o.pw, lob = pw < .35;
+  const A = aimSpot(q, r, pw, o.off || [0, 0]);
+  let L = A.L, errMul = o.hurried ? 2.3 : o.tap ? 1 : .8;
+  let grade = o.hurried ? 'HURRIED' : o.tap || lob ? 'LOB' : pw < .75 ? 'TOUCH' : 'BULLET';
   // anticipation: let it go before he breaks and it gets there right as he comes out of it
   const R0 = r.route;
-  if (R0 && R0.brk >= 0 && R0.idx <= R0.brk){ const tb = dist(r.p, R0.pts[0]) / Math.max(30, hyp(r.vel[0], r.vel[1]) || r.vmax * .8); if (tb < tau + .1){ errMul *= .65; callout(grade === 'PERFECT' ? 'PERFECT · ON TIME' : 'ON TIME', 'g'); } else callout(grade, grade === 'PERFECT' ? 'g' : grade === 'GOOD' || grade === 'LOB' ? '' : 'b'); }
-  else callout(grade, grade === 'PERFECT' ? 'g' : grade === 'GOOD' || grade === 'LOB' ? '' : 'b');
-  // placement: the stick moves the ball (lead him upfield, to the sideline, back to you)
-  if (st[2] > 0){ L = [L[0] + st[0] * 24, L[1] + st[1] * 24]; }
-  const Q = q.p;
-  L = [Q[0] + (L[0] - Q[0]) * distF, Q[1] + (L[1] - Q[1]) * distF];
-  const D = dist(Q, L), pr = pressure(), moving = hyp(q.vel[0], q.vel[1]) > 35;
-  const sd = (2.5 + (1 - q.qa) * 10) * errMul * (1 + D / 450) * (pr < 15 ? 2 : pr < 30 ? 1.4 : 1) * (moving ? 1.3 : 1);
+  let onTime = false;
+  if (!o.hurried && R0 && R0.brk >= 0 && R0.idx <= R0.brk){ const tb = dist(r.p, R0.pts[0]) / Math.max(30, hyp(r.vel[0], r.vel[1]) || r.vmax * .8); if (tb < A.tau + .1){ errMul *= .65; onTime = true; } }
+  callout(onTime ? grade + ' · ON TIME' : grade, onTime ? 'g' : o.hurried ? 'b' : '');
+  const D = dist(q.p, L), sd = throwSd(q, D, errMul);
   L = [L[0] + gauss() * sd, L[1] + gauss() * sd * .8];
-  releaseBall(q, r, L, speed, lob, grade);
+  releaseBall(q, r, L, A.sp, lob, onTime ? 'PERFECT' : 'GOOD', pw);
   S.grade = grade;
 }
 function switchMan(){
@@ -1336,15 +1344,16 @@ function render(){
   if (B.st === 'air' && B.kind === 'pass' && !B.resolved){ const w = W(B.to[0], B.to[1]); u.tgt.style.display = ''; H.put(u.tgt, w[0], w[1], 0); }
   else u.tgt.style.display = 'none';
   // the throw meter
-  if (S.hold && S.holder === S.QB){
-    const hd = S.t - S.hold.t0, id = idealOf(S.QB, S.hold.r);
-    u.meter.hidden = hd < .1;
-    const m = meterVal(hd) / 1.08;
-    u.fill.style.transform = `scaleX(${m.toFixed(3)})`;
-    u.band.style.left = ((id.c - id.hw) / 1.08 * 100).toFixed(1) + '%'; u.band.style.width = (id.hw * 2 / 1.08 * 100).toFixed(1) + '%';
-    u.needle.style.left = (m * 100).toFixed(1) + '%';
-    u.mlbl.textContent = `${padOn() ? ['A', 'B', 'X', 'Y', 'RB'][S.hold.n - 1] : S.hold.n} · ${(S.hold.r.name ? H.last(S.hold.r.name) : H.posName(S.hold.r.i)).toUpperCase()}`;
-  }
+  // aiming a throw: the power bar, and the circle where the ball will come down (its size is how accurate he'll be)
+  const aiming = S.hold && S.holder === S.QB && !S.thrown && S.t - S.hold.t0 >= TAP;
+  if (aiming){
+    const hd = S.t - S.hold.t0, pw = powerOf(hd), A = aimSpot(S.QB, S.hold.r, pw, S.hold.off);
+    u.meter.hidden = false; u.meter.classList.add('pw'); u.band.style.display = 'none';
+    u.fill.style.transform = `scaleX(${pw.toFixed(3)})`; u.needle.style.left = (pw * 100).toFixed(1) + '%';
+    u.mlbl.textContent = `${padOn() ? ['A', 'B', 'X', 'Y', 'RB'][S.hold.n - 1] : S.hold.n} · ${(S.hold.r.name ? H.last(S.hold.r.name) : H.posName(S.hold.r.i)).toUpperCase()} · ${pw < .35 ? 'LOB' : pw < .75 ? 'TOUCH' : 'BULLET'}`;
+    const w = W(A.L[0], A.L[1]), rad = clamp(14 + throwSd(S.QB, dist(S.QB.p, A.L), .8) * 1.4, 18, 44);
+    u.aim.style.display = ''; H.put(u.aim, w[0], w[1], 0); u.aim.style.setProperty('--r', rad.toFixed(1) + 'px');
+  } else { u.aim.style.display = 'none'; if (u.meter.classList.contains('pw') && !S.hold){ u.meter.hidden = true; u.meter.classList.remove('pw'); } }
   // the camera follows the ball
   const fx = W(B.st === 'air' ? lerp(B.p[0], B.to[0], .35) : B.p[0], 0)[0];
   H.camGame(fx, d);
@@ -1362,6 +1371,7 @@ function render(){
 function play(R, opt = {}){
   S = build(R, opt);
   if (opt.trace) S.dbg = [];
+  S.noThrow = !!opt.noThrow;
   S.cpuSnap = 1.3 + rnd() * .5; S.autoSnap = !!opt.autoSnap;
   if (opt.headless || !S.userSide){ if (!opt.headless) S.cpuSnap = .35; }
   if (opt.headless){
@@ -1380,7 +1390,7 @@ function play(R, opt = {}){
     const epoch = S.epoch;
     const cleanup = () => {
       removeEventListener('keydown', onKey, true); removeEventListener('keyup', onKey, true); removeEventListener('blur', onBlur);
-      const u = ui(); u.prompt.hidden = true; u.meter.hidden = true; u.hint.hidden = true; u.touch.hidden = true; u.ring.style.display = 'none'; u.tgt.style.display = 'none';
+      const u = ui(); u.prompt.hidden = true; u.meter.hidden = true; u.hint.hidden = true; u.touch.hidden = true; u.ring.style.display = 'none'; u.tgt.style.display = 'none'; u.aim.style.display = 'none'; u.meter.classList.remove('pw');
       IN.tstick = null; H.THROW.on = false; H.THROW.req = null; H.THROW.ver++;
       H.EL[H.G ? S.off : 'u'] && [...H.EL.u, ...H.EL.t].forEach(el => el.style.removeProperty('--op'));
     };
@@ -1404,7 +1414,7 @@ function kickMeter(opt = {}){
   return new Promise(res => {
     let ph = 0, t0 = 0, pw = 0, acc = 0, holding = false, last = performance.now();
     const epoch = H.epoch();
-    u.meter.hidden = false; u.meter.classList.add('kick'); u.prompt.hidden = false;
+    u.meter.hidden = false; u.meter.classList.remove('pw'); u.meter.classList.add('kick'); u.band.style.display = ''; u.prompt.hidden = false;
     KICKING = true;
     u.prompt.innerHTML = padOn() ? `<b>HOLD ${H.xbBtn('A')}</b> FOR POWER, LET GO, THEN ${H.xbBtn('A')} AGAIN TO AIM` : `<b>${isTouch() ? 'HOLD KICK' : 'HOLD SPACE'}</b> FOR POWER, LET GO, THEN PRESS AGAIN TO AIM`;
     u.band.style.left = (clamp(opt.need || .7, .3, .98) * 100 - 1) + '%'; u.band.style.width = ((1.08 - clamp(opt.need || .7, .3, .98)) / 1.08 * 100) + '%';

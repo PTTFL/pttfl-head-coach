@@ -695,3 +695,9 @@ body.xb .xbleg{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:center;p
 .npl .tk[data-x="A"]{background:#5DD35D}.npl .tk[data-x="B"]{background:#FF4F5E;color:#fff}.npl .tk[data-x="X"]{background:#4FA3FF}.npl .tk[data-x="Y"]{background:#FFD23F}.npl .tk[data-x="RB"]{background:#E8E4FF}
 .npl .tk[data-x="A"],.npl .tk[data-x="B"],.npl .tk[data-x="X"],.npl .tk[data-x="Y"]{border-radius:50%;min-width:13px}
 .lv-prompt .xbk{vertical-align:-4px}
+/* the throw circle: where the ball comes down while you aim (its size shows how accurate the throw will be) */
+.lvx.aim{z-index:5}
+.lvx.aim i{left:calc(var(--r,16px) * -1);top:calc(var(--r,16px) * -1);width:calc(var(--r,16px) * 2);height:calc(var(--r,16px) * 2);border:5px solid #5CFFE6;background:radial-gradient(circle,rgba(92,255,230,.55) 0 16%,rgba(92,255,230,.2) 17% 100%);box-shadow:0 0 16px #5CFFE6,inset 0 0 10px rgba(92,255,230,.7);transform:translateZ(1px);animation:lvaim .8s ease-in-out infinite;transition:width .1s,height .1s,left .1s,top .1s}
+@keyframes lvaim{50%{box-shadow:0 0 26px #5CFFE6,inset 0 0 14px rgba(92,255,230,.9)}}
+.lvx.aim i::after{content:"";position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#fff;box-shadow:0 0 6px #fff}
+.lv-meter.pw .lv-fill{background:linear-gradient(90deg,#5CFFE6 0%,#FFE600 60%,#FF2E88 100%)}
